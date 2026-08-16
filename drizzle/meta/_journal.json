@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1786682664590,
+      "tag": "0000_brainy_golden_guardian",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786684332599,
+      "tag": "0001_rare_husk",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786684500332,
+      "tag": "0002_ambiguous_bloodstrike",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786872138096,
+      "tag": "0003_freezing_liz_osborn",
+      "breakpoints": true
+    }
+  ]
+}
