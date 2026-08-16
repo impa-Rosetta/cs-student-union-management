@@ -143,14 +143,16 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
 });
 
 test("protects hosted data with platform identity and server roles", async () => {
-  const [auth, state, files, accounts] = await Promise.all([
+  const [auth, identity, state, files, accounts] = await Promise.all([
     readFile(new URL("../app/server-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/platform-identity.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/state/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/files/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/accounts/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(auth, /oai-authenticated-user-id/);
-  assert.match(auth, /oai-authenticated-user-email/);
+  assert.match(identity, /oai-authenticated-user-id/);
+  assert.match(identity, /oai-authenticated-user-email/);
+  assert.match(identity, /email:\$\{email\}/);
   assert.match(auth, /INSERT OR IGNORE INTO app_accounts/);
   assert.match(state, /shared_state/);
   assert.match(state, /keyRoles/);

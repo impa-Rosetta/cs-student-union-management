@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { platformIdentityFromHeaders } from "./platform-identity";
 
 export type AppRole = "admin" | "chair" | "leader" | "staff" | "teacher";
 
@@ -80,11 +81,6 @@ function toUser(row: AccountRow): AuthenticatedUser {
   };
 }
 
-function decodedName(value: string | null) {
-  if (!value) return "";
-  try { return decodeURIComponent(value); } catch { return value; }
-}
-
 export async function currentUser(request: Request, options: { allowLocal?: boolean } = {}) {
   await ensurePlatformSchema();
   if (isLocalRequest(request) && options.allowLocal !== false) {
@@ -105,10 +101,9 @@ export async function currentUser(request: Request, options: { allowLocal?: bool
     };
   }
 
-  const externalUserId = request.headers.get("oai-authenticated-user-id")?.trim() || "";
-  const email = request.headers.get("oai-authenticated-user-email")?.trim().toLowerCase() || "";
-  const fullName = decodedName(request.headers.get("oai-authenticated-user-full-name")).trim();
-  if (!externalUserId || !email) throw new AuthError(401, "请先通过站点身份认证");
+  const identity = platformIdentityFromHeaders(request.headers);
+  if (!identity) throw new AuthError(401, "请先通过站点身份认证");
+  const { externalUserId, email, fullName } = identity;
 
   let row = await env.DB.prepare("SELECT * FROM app_accounts WHERE lower(email) = ? LIMIT 1").bind(email).first<AccountRow>();
   if (!row) {
