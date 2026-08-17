@@ -30,6 +30,11 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# local npm cache used during sandboxed installs
+/.npm-cache/
+/.npm-logs/
 
 # vercel
 .vercel
@@ -42,3 +47,26 @@ yarn-error.log*
 /build/
 *.tsbuildinfo
 *.sqlite*
+*.sqlite3
+*.db
+*.db-*
+
+# Cloudflare / 开发环境变量（真实值绝不能入库）
+.dev.vars
+.dev.vars.*
+
+# 运行时数据与备份（数据库、附件、导出、备份一律放在仓库外）
+/data/
+/uploads/
+/storage/
+/backups/
+/dump/
+*.dump
+*.bak
+*.sql.gz
+docker-compose.override.yml
+
+# 部署目录里的真实环境变量（仅允许提交脱敏的 .env.example）
+/deploy/.env
+/deploy/.env.*
+!/deploy/.env.example

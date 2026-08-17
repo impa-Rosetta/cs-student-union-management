@@ -1,0 +1,21 @@
+CREATE TABLE `activities` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`category` text DEFAULT '' NOT NULL,
+	`state` text NOT NULL,
+	`date` text DEFAULT '' NOT NULL,
+	`day` text DEFAULT '' NOT NULL,
+	`month` text DEFAULT '' NOT NULL,
+	`time` text DEFAULT '' NOT NULL,
+	`location` text DEFAULT '' NOT NULL,
+	`organizer` text DEFAULT '' NOT NULL,
+	`teacher` text DEFAULT '' NOT NULL,
+	`progress` integer DEFAULT 0 NOT NULL,
+	`pending` integer DEFAULT 0 NOT NULL,
+	`departments_json` text DEFAULT '[]' NOT NULL,
+	`description` text DEFAULT '' NOT NULL,
+	`next_milestone` text DEFAULT '' NOT NULL,
+	`milestones_json` text DEFAULT '[]' NOT NULL,
+	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+);

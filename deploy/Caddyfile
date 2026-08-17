@@ -1,0 +1,7 @@
+# Caddy 反向代理：公网只暴露 80/443，自动 HTTPS。
+# 把 example.edu.cn 替换为实际域名（需已完成 ICP 备案）。
+
+example.edu.cn {
+	encode gzip
+	reverse_proxy app:3000
+}

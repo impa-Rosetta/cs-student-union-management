@@ -1,5 +1,9 @@
-import { env } from "cloudflare:workers";
-import { platformIdentityFromHeaders } from "./platform-identity";
+import { getDb } from "./db.ts";
+import { platformIdentityFromHeaders } from "./platform-identity.ts";
+import { getCookie } from "./cookie.ts";
+import { getSessionUser } from "./session-store.ts";
+
+const db = getDb();
 
 export type AppRole = "admin" | "chair" | "leader" | "staff" | "teacher";
 
@@ -30,14 +34,16 @@ type AccountRow = {
 };
 
 export class AuthError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
 export async function ensurePlatformSchema() {
-  await env.DB.batch([
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS app_accounts (
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS app_accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       external_user_id TEXT,
       email TEXT NOT NULL UNIQUE,
@@ -47,11 +53,12 @@ export async function ensurePlatformSchema() {
       department TEXT NOT NULL DEFAULT '',
       title TEXT NOT NULL DEFAULT '',
       scope TEXT NOT NULL DEFAULT '本人任务',
+      password_hash TEXT,
       active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
-    env.DB.prepare(`CREATE TABLE IF NOT EXISTS shared_state (
+    db.prepare(`CREATE TABLE IF NOT EXISTS shared_state (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
       revision INTEGER NOT NULL DEFAULT 1,
@@ -59,6 +66,11 @@ export async function ensurePlatformSchema() {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
   ]);
+  // 兼容旧库：补充 password_hash 列。
+  const columns = await db.prepare("PRAGMA table_info(app_accounts)").all<{ name: string }>();
+  if (!columns.results.some((column) => column.name === "password_hash")) {
+    await db.prepare("ALTER TABLE app_accounts ADD COLUMN password_hash TEXT").run();
+  }
 }
 
 function isLocalRequest(request: Request) {
@@ -86,6 +98,7 @@ export async function currentUser(request: Request, options: { allowLocal?: bool
   if (isLocalRequest(request) && options.allowLocal !== false) {
     return {
       localMode: true,
+      authMethod: "local" as const,
       user: {
         id: 0,
         externalUserId: "local-development",
@@ -101,18 +114,43 @@ export async function currentUser(request: Request, options: { allowLocal?: bool
     };
   }
 
+  // 1) 服务端会话 Cookie（自托管密码登录）。
+  const sessionToken = getCookie(request, "session");
+  if (sessionToken) {
+    const sessionUser = await getSessionUser(sessionToken);
+    if (sessionUser && sessionUser.active) {
+      return {
+        localMode: false,
+        authMethod: "session" as const,
+        user: {
+          id: sessionUser.id,
+          externalUserId: "",
+          email: sessionUser.email,
+          username: sessionUser.username,
+          name: sessionUser.name,
+          role: sessionUser.role as AppRole,
+          department: sessionUser.department,
+          title: sessionUser.title,
+          scope: sessionUser.scope,
+          active: sessionUser.active,
+        },
+      };
+    }
+  }
+
+  // 2) 平台身份头（Cloudflare Sites）。
   const identity = platformIdentityFromHeaders(request.headers);
-  if (!identity) throw new AuthError(401, "请先通过站点身份认证");
+  if (!identity) throw new AuthError(401, "请先登录");
   const { externalUserId, email, fullName } = identity;
 
-  let row = await env.DB.prepare("SELECT * FROM app_accounts WHERE lower(email) = ? LIMIT 1").bind(email).first<AccountRow>();
+  let row = await db.prepare("SELECT * FROM app_accounts WHERE lower(email) = ? LIMIT 1").bind(email).first<AccountRow>();
   if (!row) {
-    const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM app_accounts").first<{ total: number }>();
+    const count = await db.prepare("SELECT COUNT(*) AS total FROM app_accounts").first<{ total: number }>();
     if (Number(count?.total || 0) === 0) {
-      await env.DB.prepare(`INSERT OR IGNORE INTO app_accounts (external_user_id, email, username, name, role, department, title, scope, active)
+      await db.prepare(`INSERT OR IGNORE INTO app_accounts (external_user_id, email, username, name, role, department, title, scope, active)
         VALUES (?, ?, 'admin', ?, 'admin', '系统管理', '系统管理员', '全部数据', 1)`)
         .bind(externalUserId, email, fullName || email.split("@")[0]).run();
-      row = await env.DB.prepare("SELECT * FROM app_accounts WHERE lower(email) = ? LIMIT 1").bind(email).first<AccountRow>();
+      row = await db.prepare("SELECT * FROM app_accounts WHERE lower(email) = ? LIMIT 1").bind(email).first<AccountRow>();
       if (!row) throw new AuthError(403, "系统已由其他管理员完成初始化，请联系管理员开通账号");
     } else {
       throw new AuthError(403, "账号尚未由管理员开通");
@@ -120,10 +158,10 @@ export async function currentUser(request: Request, options: { allowLocal?: bool
   }
   if (!row || !row.active) throw new AuthError(403, "账号已停用或尚未开通");
   if (row.external_user_id !== externalUserId) {
-    await env.DB.prepare("UPDATE app_accounts SET external_user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(externalUserId, row.id).run();
+    await db.prepare("UPDATE app_accounts SET external_user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(externalUserId, row.id).run();
     row.external_user_id = externalUserId;
   }
-  return { localMode: false, user: toUser(row) };
+  return { localMode: false, authMethod: "identity" as const, user: toUser(row) };
 }
 
 export async function requireRole(request: Request, roles?: AppRole[]) {

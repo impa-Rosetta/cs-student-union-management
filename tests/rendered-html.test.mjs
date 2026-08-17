@@ -27,18 +27,23 @@ test("server-renders the authenticated student union shell", async () => {
 });
 
 test("keeps lightweight workflow and supervision rules in the product", async () => {
-  const [page, css] = await Promise.all([
+  const [pageSrc, css, workflow, taskWorkflow, model, viewsSrc] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/workflow/apply-subtask-action.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/workflow/apply-task-action.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/product-model.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/views.tsx", import.meta.url), "utf8"),
   ]);
+  const page = pageSrc + "\n" + viewsSrc;
 
   for (const mode of ["快捷办结", "凭据留痕", "负责人确认"]) {
     assert.match(page, new RegExp(mode));
   }
   assert.match(page, /登录工作台/);
-  assert.match(page, /username: "chair"/);
-  assert.match(page, /username: "leader"/);
-  assert.match(page, /username: "admin"/);
+  assert.match(model, /username: "chair"/);
+  assert.match(model, /username: "leader"/);
+  assert.match(model, /username: "admin"/);
   assert.match(page, /负责人直接办结/);
   assert.match(page, /提交主席审核/);
   assert.match(page, /审核通过/);
@@ -71,18 +76,18 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /requestTaskStatus/);
   assert.match(page, /openNotification/);
   assert.match(page, /unreadNotificationCount/);
-  assert.match(page, /persistSharedState\("notifications"/);
-  assert.match(page, /union-notification-read-v1:/);
+  assert.match(page, /api\/notifications/);
+  assert.match(page, /api\/notifications\/read/);
   assert.match(page, /pushNotification/);
   assert.match(page, /resolveUsernames/);
-  assert.match(page, /部门结办等待审核/);
-  assert.match(page, /子任务等待验收/);
-  assert.match(page, /主任务审核通过/);
+  assert.match(model, /部门结办等待审核/);
+  assert.match(workflow, /子任务等待验收/);
+  assert.match(taskWorkflow, /主任务审核通过/);
   assert.match(page, /撤销子任务/);
   assert.match(page, /withdrawSubmission/);
   assert.match(page, /withdrawMainForLeader/);
-  assert.match(page, /执行人已撤回提交/);
-  assert.match(page, /负责人已撤回结办申请/);
+  assert.match(workflow, /执行人已撤回提交/);
+  assert.match(taskWorkflow, /负责人已撤回结办申请/);
   assert.match(page, /item\.entity\?\.id === draft\.entity\?\.id/);
   assert.doesNotMatch(page, /收到新的跨部门任务/);
   assert.match(page, /activityCatalog/);
@@ -96,7 +101,7 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /全局监督工作台/);
   assert.match(page, /eventWorkspaceOpen/);
   assert.match(page, /返回主席总览/);
-  assert.match(page, /type UserRole = "admin"/);
+  assert.match(model, /type UserRole = "admin"/);
   assert.match(page, /系统管理总览/);
   assert.match(page, /账号与权限/);
   assert.match(page, /审计日志/);
@@ -110,8 +115,8 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /function AccountsWorkspace/);
   assert.match(page, /function AuditWorkspace/);
   assert.match(page, /function SettingsWorkspace/);
-  assert.match(page, /persistSharedState\("activities"/);
-  assert.match(page, /persistSharedState\("archive"/);
+  assert.match(page, /api\/activities/);
+  assert.match(page, /api\/archive/);
   assert.match(page, /学生联盟审计日志\.csv/);
   assert.doesNotMatch(page, /先选择活动，再进入独立工作空间/);
   assert.doesNotMatch(page, /这是演示附件/);
@@ -154,8 +159,9 @@ test("protects hosted data with platform identity and server roles", async () =>
   assert.match(identity, /oai-authenticated-user-email/);
   assert.match(identity, /email:\$\{email\}/);
   assert.match(auth, /INSERT OR IGNORE INTO app_accounts/);
-  assert.match(state, /shared_state/);
-  assert.match(state, /keyRoles/);
+  assert.match(state, /requireRole/);
+  assert.match(state, /listAllTasks/);
+  assert.doesNotMatch(state, /FROM shared_state/);
   assert.match(files, /requireRole/);
   assert.match(accounts, /\["admin"\]/);
 });

@@ -29,6 +29,69 @@
       "when": 1786872138096,
       "tag": "0003_freezing_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786935958679,
+      "tag": "0004_odd_workflow_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786936427076,
+      "tag": "0005_plain_notification_receipts",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786937013911,
+      "tag": "0006_bright_tasks_subtasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786937324813,
+      "tag": "0007_plain_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786937513396,
+      "tag": "0008_rare_activities",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1786938760093,
+      "tag": "0009_rare_archive_records",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1786939008099,
+      "tag": "0010_bright_password_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1786939871460,
+      "tag": "0011_bright_task_type_schemas",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1786940800000,
+      "tag": "0012_clear_legacy_shared_state",
+      "breakpoints": true
     }
   ]
 }
