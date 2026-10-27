@@ -27,15 +27,16 @@ test("server-renders the authenticated student union shell", async () => {
 });
 
 test("keeps lightweight workflow and supervision rules in the product", async () => {
-  const [pageSrc, css, workflow, taskWorkflow, model, viewsSrc] = await Promise.all([
+  const [pageSrc, css, workflow, taskWorkflow, model, viewsSrc, officeSrc] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/workflow/apply-subtask-action.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/workflow/apply-task-action.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/product-model.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/views.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/office-workspace.tsx", import.meta.url), "utf8").then(async (source) => source + "\n" + await readFile(new URL("../app/department-service-hub.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/life-department-workspace.tsx", import.meta.url), "utf8")),
   ]);
-  const page = pageSrc + "\n" + viewsSrc;
+  const page = pageSrc + "\n" + viewsSrc + "\n" + officeSrc;
 
   for (const mode of ["快捷办结", "凭据留痕", "负责人确认"]) {
     assert.match(page, new RegExp(mode));
@@ -115,6 +116,16 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /function AccountsWorkspace/);
   assert.match(page, /function AuditWorkspace/);
   assert.match(page, /function SettingsWorkspace/);
+  assert.match(page, /OfficeWorkspace/);
+  assert.match(page, /办公室办事/);
+  assert.match(page, /部门办事中心/);
+  assert.match(page, /功能筹备中/);
+  assert.match(page, /生活部办事中心/);
+  assert.match(page, /物资采购/);
+  assert.match(page, /寝室查寝/);
+  assert.match(page, /失物招领/);
+  assert.match(page, /api\/life-department/);
+  assert.match(page, /api\/office-requests/);
   assert.match(page, /api\/activities/);
   assert.match(page, /api\/archive/);
   assert.match(page, /学生联盟审计日志\.csv/);
@@ -145,6 +156,9 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(css, /task-scope-picker/);
   assert.match(css, /admin-layout/);
   assert.match(css, /permission-table/);
+  assert.match(css, /office-request-list/);
+  assert.match(css, /department-card-grid/);
+  assert.match(css, /life-stat-grid/);
 });
 
 test("protects hosted data with platform identity and server roles", async () => {

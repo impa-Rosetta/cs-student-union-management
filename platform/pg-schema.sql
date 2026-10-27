@@ -146,6 +146,57 @@ CREATE TABLE activities (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE office_requests (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL CHECK (type IN ('venue','reimbursement')),
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  requester_username TEXT NOT NULL,
+  requester_name TEXT NOT NULL,
+  requester_department TEXT NOT NULL,
+  activity_id TEXT NOT NULL DEFAULT '',
+  activity_name TEXT NOT NULL DEFAULT '',
+  deadline TEXT NOT NULL DEFAULT '',
+  description TEXT NOT NULL DEFAULT '',
+  details_json TEXT NOT NULL DEFAULT '{}',
+  materials_json TEXT NOT NULL DEFAULT '[]',
+  attachments_json TEXT NOT NULL DEFAULT '[]',
+  external_platform TEXT NOT NULL DEFAULT '',
+  external_reference TEXT NOT NULL DEFAULT '',
+  handler_name TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_office_requests_status ON office_requests (status, updated_at);
+
+CREATE TABLE office_request_events (
+  id SERIAL PRIMARY KEY,
+  request_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  from_status TEXT NOT NULL,
+  to_status TEXT NOT NULL,
+  actor_name TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_office_request_events_request ON office_request_events (request_id, id);
+
+CREATE TABLE purchase_requests (id TEXT PRIMARY KEY,title TEXT NOT NULL,status TEXT NOT NULL,requester_username TEXT NOT NULL,requester_name TEXT NOT NULL,requester_department TEXT NOT NULL,activity_id TEXT NOT NULL DEFAULT '',activity_name TEXT NOT NULL DEFAULT '',purpose TEXT NOT NULL DEFAULT '',expected_at TEXT NOT NULL DEFAULT '',estimated_total DOUBLE PRECISION NOT NULL DEFAULT 0,actual_total DOUBLE PRECISION NOT NULL DEFAULT 0,payee TEXT NOT NULL DEFAULT '',supplier TEXT NOT NULL DEFAULT '',order_number TEXT NOT NULL DEFAULT '',handler_name TEXT NOT NULL DEFAULT '',office_request_id TEXT UNIQUE,attachments_json TEXT NOT NULL DEFAULT '[]',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_purchase_requests_status ON purchase_requests (status,updated_at);
+CREATE TABLE purchase_items (id SERIAL PRIMARY KEY,purchase_id TEXT NOT NULL,name TEXT NOT NULL,image_url TEXT NOT NULL DEFAULT '',product_url TEXT NOT NULL DEFAULT '',quantity INTEGER NOT NULL DEFAULT 1,estimated_unit_price DOUBLE PRECISION NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '');
+CREATE INDEX idx_purchase_items_purchase ON purchase_items (purchase_id);
+CREATE TABLE purchase_events (id SERIAL PRIMARY KEY,purchase_id TEXT NOT NULL,action TEXT NOT NULL,from_status TEXT NOT NULL,to_status TEXT NOT NULL,actor_name TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_purchase_events_purchase ON purchase_events (purchase_id,id);
+CREATE TABLE dorm_rooms (id SERIAL PRIMARY KEY,building TEXT NOT NULL,floor TEXT NOT NULL DEFAULT '',room_number TEXT NOT NULL,leader_name TEXT NOT NULL DEFAULT '',contact TEXT NOT NULL DEFAULT '',resident_count INTEGER NOT NULL DEFAULT 0,note TEXT NOT NULL DEFAULT '',active INTEGER NOT NULL DEFAULT 1,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(building,room_number));
+CREATE TABLE dorm_inspection_batches (id TEXT PRIMARY KEY,name TEXT NOT NULL,status TEXT NOT NULL,planned_date TEXT NOT NULL DEFAULT '',leader_name TEXT NOT NULL DEFAULT '',inspectors_json TEXT NOT NULL DEFAULT '[]',room_ids_json TEXT NOT NULL DEFAULT '[]',scoring_note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_inspection_batches_status ON dorm_inspection_batches (status,updated_at);
+CREATE TABLE dorm_inspection_records (id SERIAL PRIMARY KEY,batch_id TEXT NOT NULL,room_id INTEGER NOT NULL,hygiene_score INTEGER NOT NULL DEFAULT 0,tidiness_score INTEGER NOT NULL DEFAULT 0,safety_score INTEGER NOT NULL DEFAULT 0,issue_note TEXT NOT NULL DEFAULT '',photos_json TEXT NOT NULL DEFAULT '[]',needs_rectification INTEGER NOT NULL DEFAULT 0,rectification_deadline TEXT NOT NULL DEFAULT '',rectification_note TEXT NOT NULL DEFAULT '',review_result TEXT NOT NULL DEFAULT '',review_photos_json TEXT NOT NULL DEFAULT '[]',inspector_name TEXT NOT NULL DEFAULT '',inspected_at TEXT NOT NULL DEFAULT '',reviewer_name TEXT NOT NULL DEFAULT '',reviewed_at TEXT NOT NULL DEFAULT '',UNIQUE(batch_id,room_id));
+CREATE INDEX idx_inspection_records_batch ON dorm_inspection_records (batch_id,room_id);
+CREATE TABLE lost_found_items (id TEXT PRIMARY KEY,name TEXT NOT NULL,category TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,found_location TEXT NOT NULL DEFAULT '',found_at TEXT NOT NULL DEFAULT '',storage_location TEXT NOT NULL DEFAULT '',public_description TEXT NOT NULL DEFAULT '',secret_feature TEXT NOT NULL DEFAULT '',photos_json TEXT NOT NULL DEFAULT '[]',registrant_username TEXT NOT NULL,registrant_name TEXT NOT NULL,publish_url TEXT NOT NULL DEFAULT '',claimant_name TEXT NOT NULL DEFAULT '',claimant_student_no TEXT NOT NULL DEFAULT '',claimant_contact TEXT NOT NULL DEFAULT '',verification_note TEXT NOT NULL DEFAULT '',handler_name TEXT NOT NULL DEFAULT '',claimed_at TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_lost_found_status ON lost_found_items (status,updated_at);
+CREATE TABLE lost_found_events (id SERIAL PRIMARY KEY,item_id TEXT NOT NULL,action TEXT NOT NULL,from_status TEXT NOT NULL,to_status TEXT NOT NULL,actor_name TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_lost_found_events_item ON lost_found_events (item_id,id);
+
 CREATE TABLE archive_records (
   id TEXT PRIMARY KEY,
   academic_year TEXT NOT NULL DEFAULT '',

@@ -43,7 +43,7 @@ export interface WorkflowNotificationDraft {
   title: string;
   detail: string;
   level: "info" | "success" | "warning";
-  entity: { type: "subtask" | "task"; id: string | number; parentTaskId?: number };
+  entity: { type: "subtask" | "task" | "activity"; id: string | number; parentTaskId?: number };
 }
 
 export interface WorkflowActor {
@@ -53,7 +53,7 @@ export interface WorkflowActor {
 }
 
 export interface WorkflowTransitionEvent {
-  entityType: "task" | "subtask";
+  entityType: "task" | "subtask" | "activity" | "office_request" | "purchase_request" | "dorm_inspection" | "lost_found";
   entityId: string | number;
   action: string;
   fromStatus: string;

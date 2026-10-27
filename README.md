@@ -3,7 +3,7 @@
 > **私有测试版 · v0.1.0-test** —— 本仓库为 Private，仅限内部测试，请勿公开、请勿开启公开 Pages。
 > 演示账号与演示数据仅用于本机开发，**不得用于生产环境**；生产部署必须通过独立数据库初始化管理员。
 
-面向学生联盟内部的活动、任务、组织成员、通知和资料归档系统。系统按管理员、主席、负责人、干事、教师五类身份提供不同工作台，支持主任务下发、负责人拆解、执行凭据、逐级验收、撤回修改和活动资料留存。
+面向学生联盟内部的活动、任务、组织成员、办公室办事、通知和资料归档系统。系统按管理员、主席、负责人、干事、教师五类身份提供不同工作台，支持主任务下发、负责人拆解、执行凭据、逐级验收、撤回修改、场地与报销申请以及活动资料留存。
 
 ## 技术架构
 
@@ -16,9 +16,9 @@
 
 ## 数据模型（关系表）
 
-任务/子任务/活动/通知/归档/审计已从共享 JSON 迁移到关系表：
+任务/子任务/活动/办公室申请/通知/归档/审计已从共享 JSON 迁移到关系表：
 
-`terms`、`departments`、`members`、`app_accounts`、`tasks`、`subtasks`、`activities`、`notifications`、`notification_receipts`、`workflow_events`、`archive_records`、`sessions`、`task_type_schemas`、`system_config`、`research_items`、`workflow_records`；`shared_state` 已无业务读写（仅历史数据留存，各存储模块做一次性迁移）。
+`terms`、`departments`、`members`、`app_accounts`、`tasks`、`subtasks`、`activities`、`office_requests`、`office_request_events`、`purchase_requests`、`purchase_items`、`purchase_events`、`dorm_rooms`、`dorm_inspection_batches`、`dorm_inspection_records`、`lost_found_items`、`lost_found_events`、`notifications`、`notification_receipts`、`workflow_events`、`archive_records`、`sessions`、`task_type_schemas`、`system_config`、`research_items`、`workflow_records`；`shared_state` 已无业务读写（仅历史数据留存，各存储模块做一次性迁移）。
 
 动态字段（`fields_json`）、附件（`attachments_json`）、部门列表（`departments_json`）等以 JSON 列承载，可进一步拆分。
 

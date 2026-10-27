@@ -38,6 +38,8 @@ let archiveRoute;
 let notificationsReadRoute;
 let setStorage;
 let organizationRoute;
+let officeRequestsRoute;
+let lifeDepartmentRoute;
 
 const USERS = [
   { email: "admin@demo.local", username: "admin", name: "管理员", role: "admin", department: "系统管理" },
@@ -129,6 +131,8 @@ before(async () => {
   archiveRoute = await import("../app/api/archive/route.ts");
   notificationsReadRoute = await import("../app/api/notifications/read/route.ts");
   organizationRoute = await import("../app/api/organization/route.ts");
+  officeRequestsRoute = await import("../app/api/office-requests/route.ts");
+  lifeDepartmentRoute = await import("../app/api/life-department/route.ts");
 });
 
 after(() => {
@@ -229,6 +233,72 @@ test("API：state GET 五类账号均可读业务状态", async () => {
     assert.ok(Array.isArray(body.state.tasks));
     assert.ok(Array.isArray(body.state.subtasks));
   }
+});
+
+test("办公室办事：申请创建、提交、受理和办结均持久化", async () => {
+  let res = await officeRequestsRoute.POST(requestFor("leader@demo.local", { method: "POST", path: "/api/office-requests", body: {
+    type: "venue", title: "集成测试教室申请", activityName: "测试活动", details: { roomType: "普通教室" },
+    materials: [{ key: "contact", label: "联系人已确认", checked: true }],
+  } }));
+  assert.equal(res.status, 201);
+  let body = await res.json();
+  const id = body.item.id;
+  assert.equal(body.item.status, "草稿");
+
+  res = await officeRequestsRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/office-requests", body: { id, action: "submit" } }));
+  assert.equal(res.status, 200);
+  body = await res.json();
+  assert.equal(body.item.status, "待办公室审核");
+
+  res = await officeRequestsRoute.PATCH(requestFor("chair@demo.local", { method: "PATCH", path: "/api/office-requests", body: { id, action: "process", externalPlatform: "教务平台" } }));
+  assert.equal(res.status, 200);
+  res = await officeRequestsRoute.PATCH(requestFor("chair@demo.local", { method: "PATCH", path: "/api/office-requests", body: { id, action: "complete", externalReference: "JW-2026-001" } }));
+  assert.equal(res.status, 200);
+  body = await res.json();
+  assert.equal(body.item.status, "已完成");
+  assert.equal(body.item.externalReference, "JW-2026-001");
+  assert.ok(body.events.length >= 4);
+
+  res = await officeRequestsRoute.GET(requestFor("staff@demo.local", { path: "/api/office-requests" }));
+  body = await res.json();
+  assert.ok(body.items.some((item) => item.id === id && item.status === "已完成"));
+});
+
+test("办公室办事：普通部门成员不能受理，教师不能创建", async () => {
+  let res = await officeRequestsRoute.POST(requestFor("staff@demo.local", { method: "POST", path: "/api/office-requests", body: { type: "reimbursement", title: "权限测试报销" } }));
+  const body = await res.json();
+  res = await officeRequestsRoute.PATCH(requestFor("staff@demo.local", { method: "PATCH", path: "/api/office-requests", body: { id: body.item.id, action: "submit" } }));
+  assert.equal(res.status, 200);
+  res = await officeRequestsRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/office-requests", body: { id: body.item.id, action: "process" } }));
+  assert.equal(res.status, 403);
+  res = await officeRequestsRoute.POST(requestFor("teacher@demo.local", { method: "POST", path: "/api/office-requests", body: { type: "venue", title: "教师越权" } }));
+  assert.equal(res.status, 403);
+});
+
+test("生活部：采购申请可完成采购并唯一转交办公室报销", async () => {
+  let res=await lifeDepartmentRoute.POST(requestFor("leader@demo.local",{method:"POST",path:"/api/life-department",body:{kind:"purchase",purchase:{title:"活动矿泉水采购",purpose:"活动现场饮用",activityName:"测试活动",payee:"负责人"},items:[{name:"矿泉水",quantity:2,estimatedUnitPrice:30,imageUrl:"",productUrl:"",note:""}]}}));
+  assert.equal(res.status,201);let body=await res.json();const id=body.item.id;
+  res=await lifeDepartmentRoute.PATCH(requestFor("leader@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"purchase",id,action:"submit"}}));assert.equal(res.status,200);
+  res=await lifeDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"purchase",id,action:"approve"}}));assert.equal(res.status,200);
+  res=await lifeDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"purchase",id,action:"purchased",data:{actualTotal:58,supplier:"校园超市",orderNumber:"ORD-001",payee:"负责人"}}}));assert.equal(res.status,200);
+  res=await lifeDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"purchase",id,action:"transfer"}}));assert.equal(res.status,200);body=await res.json();assert.equal(body.item.status,"待办公室报销");assert.ok(body.item.officeRequestId);
+  const office=await officeRequestsRoute.GET(requestFor("chair@demo.local",{path:"/api/office-requests"}));const officeBody=await office.json();assert.ok(officeBody.items.some((item)=>item.id===body.item.officeRequestId&&item.details.purchaseRequestId===id));
+});
+
+test("生活部：寝室档案、查寝评分和归档闭环", async () => {
+  let res=await lifeDepartmentRoute.POST(requestFor("chair@demo.local",{method:"POST",path:"/api/life-department",body:{kind:"room",room:{building:"测试楼",floor:"3",roomNumber:"301",leaderName:"同学甲",residentCount:4}}}));assert.equal(res.status,201);
+  let snapshot=await lifeDepartmentRoute.GET(requestFor("chair@demo.local",{path:"/api/life-department"}));let body=await snapshot.json();const room=body.rooms.find((item)=>item.building==="测试楼"&&item.roomNumber==="301");assert.ok(room);
+  res=await lifeDepartmentRoute.POST(requestFor("chair@demo.local",{method:"POST",path:"/api/life-department",body:{kind:"batch",batch:{name:"第十周查寝",plannedDate:"2026-10-26",roomIds:[room.id]}}}));body=await res.json();const batchId=body.item.id;
+  res=await lifeDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"batch",id:batchId,action:"start"}}));assert.equal(res.status,200);
+  res=await lifeDepartmentRoute.POST(requestFor("chair@demo.local",{method:"POST",path:"/api/life-department",body:{kind:"inspectionRecord",record:{batchId,roomId:room.id,hygieneScore:9,tidinessScore:8,safetyScore:10,needsRectification:false}}}));assert.equal(res.status,200);
+  res=await lifeDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"batch",id:batchId,action:"archive"}}));assert.equal(res.status,200);body=await res.json();assert.equal(body.item.status,"已归档");
+});
+
+test("生活部：失物发布、认领核验和归还闭环", async () => {
+  let res=await lifeDepartmentRoute.POST(requestFor("chair@demo.local",{method:"POST",path:"/api/life-department",body:{kind:"lostFound",item:{name:"校园卡",category:"证件卡片",foundLocation:"理四楼",foundAt:"2026-10-26T10:00",secretFeature:"尾号1234"}}}));assert.equal(res.status,201);let body=await res.json();const id=body.item.id;
+  for(const [action,data] of [["submitPublish",{}],["publish",{publishUrl:"https://example.com/notice"}],["claim",{claimantName:"张同学",claimantStudentNo:"20260001",claimantContact:"13800000000"}],["return",{verificationNote:"已核对校园卡尾号和学生证"}]]){res=await lifeDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"lostFound",id,action,data}}));assert.equal(res.status,200,`${action} 应成功`);body=await res.json();}
+  assert.equal(body.item.status,"已归还");
+  res=await lifeDepartmentRoute.GET(requestFor("staff@demo.local",{path:"/api/life-department"}));body=await res.json();assert.equal(body.lostFound.find((item)=>item.id===id).secretFeature,"");
 });
 
 // ── 工作流主链路（任务状态机 + 持久化 + 通知 + 审计）──────────────
@@ -409,6 +479,70 @@ test("API：activities POST 仅 admin/chair，其余 403", async () => {
     const res = await activitiesRoute.POST(requestFor(`${role}@demo.local`, { method: "POST", body: { activity: { ...activity, id: `act-${role}` } } }));
     assert.equal(res.status, 403, `${role} 创建活动应被拒绝`);
   }
+});
+
+test("API：活动创建固定为草稿，阶段必须通过 PATCH 推进", async () => {
+  const id = `activity-lifecycle-${Date.now()}`;
+  const create = await activitiesRoute.POST(requestFor("chair@demo.local", {
+    method: "POST",
+    body: { activity: { id, name: "生命周期测试活动", state: "已归档", organizer: "主席团", departments: [] } },
+  }));
+  assert.equal(create.status, 200);
+  assert.equal((await create.json()).activity.state, "草稿");
+
+  const submit = await activitiesRoute.PATCH(requestFor("chair@demo.local", {
+    method: "PATCH",
+    body: { id, action: "submit" },
+  }));
+  assert.equal(submit.status, 200);
+  assert.equal((await submit.json()).activity.state, "待审批");
+
+  const approve = await activitiesRoute.PATCH(requestFor("chair@demo.local", {
+    method: "PATCH",
+    body: { id, action: "approve" },
+  }));
+  assert.equal(approve.status, 200);
+  assert.equal((await approve.json()).activity.state, "筹备中");
+});
+
+test("API：活动阶段流转写入审计并通知下一处理人", async () => {
+  const id = `activity-audit-${Date.now()}`;
+  const create = await activitiesRoute.POST(requestFor("chair@demo.local", {
+    method: "POST",
+    body: { activity: { id, name: "审批留痕测试活动", organizer: "运维部", teacher: "指导教师", departments: ["运维部"] } },
+  }));
+  assert.equal(create.status, 200);
+
+  const submit = await activitiesRoute.PATCH(requestFor("leader@demo.local", {
+    method: "PATCH",
+    body: { id, action: "submit", note: "活动方案与预算已经齐备" },
+  }));
+  assert.equal(submit.status, 200);
+  const submitBody = await submit.json();
+  assert.equal(submitBody.activity.state, "待审批");
+  assert.deepEqual(new Set(submitBody.notifications.flatMap((item) => item.recipientUsernames)), new Set(["chair", "teacher"]));
+
+  const approve = await activitiesRoute.PATCH(requestFor("teacher@demo.local", {
+    method: "PATCH",
+    body: { id, action: "approve", note: "同意按方案推进" },
+  }));
+  assert.equal(approve.status, 200);
+  const approveBody = await approve.json();
+  assert.equal(approveBody.activity.state, "筹备中");
+  assert.ok(approveBody.notifications.some((item) => item.recipientUsernames.includes("leader")));
+
+  const audit = await auditRoute.GET(requestFor("chair@demo.local", { path: "/api/audit?limit=500" }));
+  assert.equal(audit.status, 200);
+  const events = (await audit.json()).events.filter((event) => event.entity_type === "activity" && event.entity_id === id);
+  assert.equal(events.length, 2);
+  assert.equal(events[0].from_status, "待审批");
+  assert.equal(events[0].to_status, "筹备中");
+  assert.equal(events[0].reason, "同意按方案推进");
+  assert.equal(events[1].actor_role, "leader");
+
+  const state = await stateRoute.GET(requestFor("leader@demo.local", { path: "/api/state" }));
+  const storedNotifications = (await state.json()).state.notifications;
+  assert.ok(storedNotifications.some((item) => item.entity?.type === "activity" && item.entity.id === id && item.recipientUsernames.includes("leader")));
 });
 
 test("API：archive POST 仅 admin/chair/leader，其余 403", async () => {

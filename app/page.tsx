@@ -3,6 +3,7 @@
 import {
   Activity,
   Bell,
+  Building2,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -29,6 +30,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import type { ActivityAction } from "./activity-workflow/state-machine";
 import { aggregateMainTaskStatus, type TaskStatus } from "./workflow/state-machine";
 import {
   activityCatalog, archiveRecords, currentActivity, deleteAttachmentObject,
@@ -525,6 +527,7 @@ export default function Home() {
       if (parent) return setSelected(parent);
     }
     if (item.entity?.type === "activity") return setActiveView("activities");
+    if (["officeRequest", "purchase", "lostFound"].includes(item.entity?.type || "")) return setActiveView("departmentServices");
     if (item.entity?.type === "account") {
       if (userRole === "admin") return setActiveView("accounts");
       setNotice(item.detail); window.setTimeout(() => setNotice(""), 2400); return;
@@ -548,7 +551,7 @@ export default function Home() {
       const [year, month, day] = datePart.split("-");
       const departments = Array.from(new Set([data.department, ...data.departments.split(/[、,，]/).map((item) => item.trim()).filter(Boolean)]));
       const next: ActivityRecord = {
-        id: editingActivity?.id || `activity-${Date.now()}`, name: data.name, category: data.activityCategory || "综合活动", state: data.state as ActivityRecord["state"],
+        id: editingActivity?.id || `activity-${Date.now()}`, name: data.name, category: data.activityCategory || "综合活动", state: editingActivity?.state ?? "草稿",
         date: `${year}年${Number(month)}月${Number(day)}日`, day: day.padStart(2,"0"), month: `${Number(month)}月`, time: timePart || "待定", location: data.location || "待定",
         organizer: data.department, teacher: data.teacher || "未指定", progress: editingActivity?.progress || 0, pending: editingActivity?.pending || 0, departments,
         description: data.detail || "", nextMilestone: editingActivity?.nextMilestone || "待安排", milestones: editingActivity?.milestones || [],
@@ -580,6 +583,30 @@ export default function Home() {
     setQuickFlow("eventSettings");
   }
 
+  async function runActivityAction(id: string, action: ActivityAction, note?: string) {
+    const response = await fetch("/api/activities", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, action, note }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = result.error || "活动流程操作失败";
+      setNotice(message);
+      window.setTimeout(() => setNotice(""), 3000);
+      return;
+    }
+    setActivities((current) => current.map((activity) => activity.id === id ? result.activity : activity));
+    if (Array.isArray(result.notifications)) {
+      setNotificationRecords((current) => [
+        ...result.notifications,
+        ...current.filter((record) => !result.notifications.some((created: NotificationRecord) => created.id === record.id)),
+      ]);
+    }
+    setNotice(`活动已进入“${result.activity.state}”阶段`);
+    window.setTimeout(() => setNotice(""), 2400);
+  }
+
   const editingDate = editingActivity?.date.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
   const editingClock = editingActivity?.time.match(/\d{2}:\d{2}/)?.[0] || "09:00";
   const quickActivityData = editingActivity ? { name: editingActivity.name, activityCategory: editingActivity.category, state: editingActivity.state, department: editingActivity.organizer, time: editingDate ? `${editingDate[1]}-${editingDate[2].padStart(2,"0")}-${editingDate[3].padStart(2,"0")}T${editingClock}` : "2026-10-12T09:00", location: editingActivity.location, teacher: editingActivity.teacher, departments: editingActivity.departments.join("、"), detail: editingActivity.description } : undefined;
@@ -599,6 +626,7 @@ export default function Home() {
           <button className={`nav-item ${activeView === "overview" && !eventWorkspaceOpen ? "active" : ""}`} title="工作台总览" onClick={() => { setActiveView("overview"); setEventWorkspaceOpen(false); }}><LayoutDashboard size={18} />{userRole === "admin" ? "系统总览" : userRole === "chair" ? "主席总览" : userRole === "leader" ? "部门工作台" : userRole === "teacher" ? "指导教师看板" : "我的工作台"}</button>
           {userRole !== "admin" && <button className={`nav-item ${activeView === "activities" || eventWorkspaceOpen ? "active" : ""}`} title="活动管理" onClick={() => { setActiveView("activities"); setEventWorkspaceOpen(false); }}><Activity size={18} />活动管理<span className="nav-count">{activities.length}</span></button>}
           {userRole === "chair" && <button className={`nav-item ${activeView === "tasks" ? "active" : ""}`} title="任务中心" onClick={() => setActiveView("tasks")}><ListTodo size={18} />任务中心<span className="nav-count alert">{tasks.filter(t => t.status !== "已完成").length}</span></button>}
+          <button className={`nav-item ${activeView === "departmentServices" ? "active" : ""}`} title="部门办事中心" onClick={() => { setActiveView("departmentServices"); setEventWorkspaceOpen(false); }}><Building2 size={18}/>部门办事中心</button>
           {(userRole === "chair" || userRole === "admin") && <button className={`nav-item ${activeView === "organization" ? "active" : ""}`} title="组织与成员" onClick={() => setActiveView("organization")}><Users size={18} />组织与成员</button>}
           {userRole !== "admin" && <button className={`nav-item ${activeView === "archive" ? "active" : ""}`} title="资料归档" onClick={() => setActiveView("archive")}><FileText size={18} />资料归档</button>}
           {userRole === "admin" && <button className={`nav-item ${activeView === "accounts" ? "active" : ""}`} title="账号与权限" onClick={() => setActiveView("accounts")}><UserCheck size={18}/>账号与权限{accountDirectory.filter((account) => !account.active).length > 0 && <span className="nav-count alert">{accountDirectory.filter((account) => !account.active).length}</span>}</button>}
@@ -629,7 +657,7 @@ export default function Home() {
         {showNotifications && <aside className="notification-panel"><header><div><h2>{userRole === "admin" ? "系统通知" : userRole === "chair" ? "主席通知" : userRole === "leader" ? "负责人通知" : userRole === "teacher" ? "指导教师通知" : "我的通知"}</h2><span>{unreadNotificationCount} 条未读</span></div><button className="icon-button" onClick={() => setShowNotifications(false)}><X size={17}/></button></header><div>{notifications.length ? notifications.map((item) => { const isRead = readNotifications.includes(item.id); return <button key={item.id} className={`${item.level || ""} ${isRead ? "read" : ""}`} onClick={() => openNotification(item)}><i/><span><strong>{item.title}</strong><p>{item.detail}</p><small>{item.time}</small></span></button>; }) : <div className="notification-empty"><Bell size={20}/><strong>暂无通知</strong></div>}</div><footer><button disabled={!unreadNotificationCount} onClick={() => { const ids = notifications.map((item) => item.id); setReadNotifications(ids); if (session) void fetch("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: session.username, ids }) }).catch(() => undefined); setNotice("已将当前通知全部标为已读"); }}>全部标为已读</button></footer></aside>}
 
         <div className="content">
-          {activeView !== "overview" ? <ProductModule user={session} view={activeView} tasks={tasks} activities={activities} archiveItems={archiveItems} role={userRole} onBack={() => { setActiveView("overview"); setEventWorkspaceOpen(userRole === "chair"); }} onOpenTask={setSelected} onCreate={userRole === "chair" ? openNewTask : () => setNotice("只有主席可以发布主任务")} onCreateActivity={() => { setEditingActivity(null); setQuickFlow("activity"); }} onEditActivity={editActivity} onUploadArchive={() => setQuickFlow("archive")} notify={handleNotify} pushNotification={pushNotification} /> : userRole !== "chair" ? <RoleDashboard user={session} accounts={accountDirectory} role={userRole} tasks={tasks} activities={activities} subtasks={subtasks} onWorkflowAction={runWorkflowAction} onOpenTask={setSelected} onStartMain={startMainAsLeader} onSubmitMain={submitMainForChair} onWithdrawMain={withdrawMainForLeader} notify={handleNotify} notifications={notifications} /> : !eventWorkspaceOpen ? <ChairOverview tasks={tasks} activities={activities} onOpenTask={setSelected} onOpenActivities={() => setActiveView("activities")} onOpenTasks={() => setActiveView("tasks")}/> : <>
+          {activeView !== "overview" ? <ProductModule user={session} view={activeView} tasks={tasks} activities={activities} archiveItems={archiveItems} role={userRole} onBack={() => { setActiveView("overview"); setEventWorkspaceOpen(userRole === "chair"); }} onOpenTask={setSelected} onCreate={userRole === "chair" ? openNewTask : () => setNotice("只有主席可以发布主任务")} onCreateActivity={() => { setEditingActivity(null); setQuickFlow("activity"); }} onEditActivity={editActivity} onActivityAction={runActivityAction} onUploadArchive={() => setQuickFlow("archive")} notify={handleNotify} pushNotification={pushNotification} /> : userRole !== "chair" ? <RoleDashboard user={session} accounts={accountDirectory} role={userRole} tasks={tasks} activities={activities} subtasks={subtasks} onWorkflowAction={runWorkflowAction} onOpenTask={setSelected} onStartMain={startMainAsLeader} onSubmitMain={submitMainForChair} onWithdrawMain={withdrawMainForLeader} notify={handleNotify} notifications={notifications} /> : !eventWorkspaceOpen ? <ChairOverview tasks={tasks} activities={activities} onOpenTask={setSelected} onOpenActivities={() => setActiveView("activities")} onOpenTasks={() => setActiveView("tasks")}/> : <>
           <section className="event-head">
             <div className="event-title-row">
               <div><span className="event-kicker">校级文体活动 · 筹备中</span><h1>计算学院十佳歌手比赛</h1></div>
@@ -728,7 +756,7 @@ export default function Home() {
             </div>
 
             <div className="wizard-body">
-              {newStep === 1 && <section className="wizard-section"><div className="wizard-title"><h3>任务范围</h3></div><div className="task-scope-picker"><label><span>所属活动 *</span><select value={draft.activityName === "非活动临时事项" ? "standalone" : activities.find((activity) => activity.name === draft.activityName)?.id || ""} onChange={(event) => selectDraftActivity(event.target.value)}><option value="">请选择活动</option>{activities.filter((activity) => activity.state !== "已结束").map((activity) => <option key={activity.id} value={activity.id}>{activity.name} · {activity.state}</option>)}<option value="standalone">非活动临时事项</option></select></label>{draft.activityName ? <div className="scope-preview"><Activity size={18}/><span><strong>{draft.activityName}</strong><small>{draft.activityName === "非活动临时事项" ? "不进入活动进度，仅在任务中心跟踪" : `${draft.activityTime} · ${draft.activityLocation}`}</small></span><CheckCircle2 size={17}/></div> : <div className="scope-empty"><CircleAlert size={17}/><span>请选择活动后继续</span></div>}</div><div className="wizard-subtitle"><h4>任务类型</h4></div><div className="type-selector compact">{taskTypes.map((type) => { const Icon = type.icon; return <button key={type.name} className={draft.kind === type.name ? "chosen" : ""} onClick={() => setDraft({ ...draft, kind: type.name, dynamic: {} })}><Icon size={20} /><span><strong>{type.name}</strong><small>{type.note}</small></span>{draft.kind === type.name && <CheckCircle2 size={17} className="type-check" />}</button>; })}</div></section>}
+              {newStep === 1 && <section className="wizard-section"><div className="wizard-title"><h3>任务范围</h3></div><div className="task-scope-picker"><label><span>所属活动 *</span><select value={draft.activityName === "非活动临时事项" ? "standalone" : activities.find((activity) => activity.name === draft.activityName)?.id || ""} onChange={(event) => selectDraftActivity(event.target.value)}><option value="">请选择活动</option>{activities.filter((activity) => activity.state !== "已归档").map((activity) => <option key={activity.id} value={activity.id}>{activity.name} · {activity.state}</option>)}<option value="standalone">非活动临时事项</option></select></label>{draft.activityName ? <div className="scope-preview"><Activity size={18}/><span><strong>{draft.activityName}</strong><small>{draft.activityName === "非活动临时事项" ? "不进入活动进度，仅在任务中心跟踪" : `${draft.activityTime} · ${draft.activityLocation}`}</small></span><CheckCircle2 size={17}/></div> : <div className="scope-empty"><CircleAlert size={17}/><span>请选择活动后继续</span></div>}</div><div className="wizard-subtitle"><h4>任务类型</h4></div><div className="type-selector compact">{taskTypes.map((type) => { const Icon = type.icon; return <button key={type.name} className={draft.kind === type.name ? "chosen" : ""} onClick={() => setDraft({ ...draft, kind: type.name, dynamic: {} })}><Icon size={20} /><span><strong>{type.name}</strong><small>{type.note}</small></span>{draft.kind === type.name && <CheckCircle2 size={17} className="type-check" />}</button>; })}</div></section>}
 
               {newStep === 2 && <section className="wizard-section"><div className="wizard-title"><h3>填写任务基本信息</h3></div><div className="form-grid"><label className="span-2"><span>任务名称 *</span><input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder={draft.kind === "物资制作" ? "例如：定制活动主题横幅" : "请输入清晰、可执行的任务名称"} /></label><label className="span-2"><span>任务说明</span><textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="说明任务背景、执行要求和交付结果" rows={3} /></label><label><span>负责部门 *</span><select value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value, person: "待指派" })}><option>运维部</option><option>PC部</option><option>心理部</option><option>文艺部</option><option>新媒体中心</option><option>办公室</option></select></label><label><span>执行人（可直接指定负责人）</span><select value={draft.person} onChange={(e) => setDraft({ ...draft, person: e.target.value })}><option>待指派</option>{draftAssignees.map((member) => <option key={`${member.name}-${member.position}`} value={member.name}>{member.name}（{member.position}）</option>)}</select><small className="field-hint">{draftAssignees.length ? `已读取${draft.department}在任成员` : "该部门暂无可指派成员，可先创建后由负责人接收"}</small></label><label><span>截止时间 *</span><input type="datetime-local" value={draft.deadline} onChange={(e) => setDraft({ ...draft, deadline: e.target.value })} /></label><label><span>优先级</span><select value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value })}><option>普通</option><option>重要</option><option>紧急</option></select></label></div></section>}
               {newStep === 2 && <div className="wizard-activity-context"><div><Activity size={17}/><span><small>所属范围</small><strong>{draft.activityName}</strong></span></div><div><CalendarDays size={17}/><span><small>活动时间</small><strong>{draft.activityTime || "不适用"}</strong></span></div><div><MapPin size={17}/><span><small>活动地点</small><strong>{draft.activityLocation || "不适用"}</strong></span></div><div><UserCheck size={17}/><span><small>指导教师</small><strong>{draft.liaisonTeacher || "未指定"}</strong></span></div></div>}

@@ -2,6 +2,7 @@
 // 由 app/page.tsx 拆分而来，作为各视图/组件共享的数据层。
 
 import { Activity, FileText, PackageCheck, Settings, Users } from "lucide-react";
+import { normalizeActivityStage, type ActivityStage } from "./activity-workflow/state-machine";
 import type { TaskStatus } from "./workflow/state-machine";
 
 export type Attachment = { key: string; name: string; size: number; type?: string };
@@ -74,7 +75,7 @@ export type ActivityRecord = {
   id: string;
   name: string;
   category: string;
-  state: "筹备中" | "策划中" | "待启动" | "已结束";
+  state: ActivityStage;
   date: string;
   day: string;
   month: string;
@@ -90,14 +91,21 @@ export type ActivityRecord = {
   milestones: { date: string; title: string; owner: string; done?: boolean }[];
 };
 
-export const activityCatalog: ActivityRecord[] = [
+const legacyActivityCatalog = [
   { id: "top-singer", name: currentActivity.name, category: "文体活动", state: "筹备中", date: "2026年9月25日", day: "25", month: "9月", time: "18:30–21:30", location: currentActivity.location, organizer: "文艺部", teacher: currentActivity.liaisonTeacher, progress: 67, pending: 5, departments: ["文艺部", "运维部", "新媒体中心", "心理部", "办公室", "生活部"], description: "面向全院学生举办的校园歌手赛事，统一协调舞台、宣传、现场服务与赛后报道。", nextMilestone: "9月23日 19:00 舞台联排", milestones: [{ date: "9月19日", title: "预热推文发布", owner: "新媒体中心", done: true }, { date: "9月20日", title: "横幅定稿与下单", owner: "运维部" }, { date: "9月23日", title: "舞台联排", owner: "文艺部、运维部" }, { date: "9月25日", title: "正式比赛", owner: "全体协作部门" }] },
   { id: "photo-exhibition", name: "学院新闻摄影展", category: "品牌宣传", state: "策划中", date: "2026年10月8日", day: "08", month: "10月", time: "全天", location: "计算机楼一楼展厅", organizer: "新媒体中心", teacher: "李静", progress: 35, pending: 7, departments: ["新媒体中心", "办公室", "实践部"], description: "征集并展出学院年度新闻摄影作品，完成作品评审、展陈设计与线上专题推送。", nextMilestone: "9月28日 作品征集截止", milestones: [{ date: "9月18日", title: "发布征集通知", owner: "新媒体中心", done: true }, { date: "9月28日", title: "作品征集截止", owner: "新媒体中心" }, { date: "10月3日", title: "完成评审与排版", owner: "评审组" }, { date: "10月8日", title: "开展与专题发布", owner: "新媒体中心" }] },
   { id: "operation-contest", name: "重大赛事运营策划大赛", category: "创新实践", state: "策划中", date: "2026年10月16日", day: "16", month: "10月", time: "14:00–18:00", location: "计算机楼学术报告厅", organizer: "新媒体中心", teacher: "赵峰", progress: 22, pending: 9, departments: ["新媒体中心", "实践部", "职规部"], description: "以真实赛事为背景开展运营方案设计、路演展示和专家评审。", nextMilestone: "9月26日 完成赛制与评分标准", milestones: [{ date: "9月20日", title: "立项与需求访谈", owner: "新媒体中心", done: true }, { date: "9月26日", title: "赛制与评分标准定稿", owner: "策划组" }, { date: "10月10日", title: "参赛方案收集", owner: "实践部" }, { date: "10月16日", title: "路演评审", owner: "执行组" }] },
   { id: "coding-contest", name: "新生程序设计竞赛", category: "科技竞赛", state: "待启动", date: "2026年10月12日", day: "12", month: "10月", time: "14:00–17:00", location: "计算机实验中心", organizer: "科创中心", teacher: "刘倩", progress: 18, pending: 6, departments: ["PC部", "运维部", "学习部", "新媒体中心"], description: "面向新生的程序设计入门竞赛，覆盖命题、报名、机房环境、监考与成绩发布。", nextMilestone: "9月30日 完成机房环境测试", milestones: [{ date: "9月22日", title: "竞赛通知定稿", owner: "PC部", done: true }, { date: "9月30日", title: "机房环境测试", owner: "运维部" }, { date: "10月8日", title: "报名与考场编排", owner: "PC部" }, { date: "10月12日", title: "正式比赛", owner: "科创中心" }] },
   { id: "career-sharing", name: "秋季校园招聘经验分享会", category: "职业发展", state: "待启动", date: "2026年10月20日", day: "20", month: "10月", time: "19:00–21:00", location: "计算机楼216", organizer: "职规部", teacher: "孙琳", progress: 8, pending: 4, departments: ["职规部", "新媒体中心", "办公室"], description: "邀请高年级同学分享秋招准备、简历优化和面试经验。", nextMilestone: "10月5日 确认分享嘉宾", milestones: [{ date: "10月5日", title: "确认分享嘉宾", owner: "职规部" }, { date: "10月10日", title: "发布报名推送", owner: "新媒体中心" }, { date: "10月18日", title: "场地与材料确认", owner: "办公室" }, { date: "10月20日", title: "现场分享", owner: "职规部" }] },
   { id: "welcome-night", name: "计算学院迎新晚会", category: "文体活动", state: "已结束", date: "2026年9月6日", day: "06", month: "9月", time: "19:00–21:30", location: "大学生活动中心", organizer: "文艺部", teacher: "王明远", progress: 100, pending: 0, departments: ["文艺部", "新媒体中心", "运维部", "生活部"], description: "面向新生的学院迎新晚会，活动执行已完成，当前进入资料归档与复盘阶段。", nextMilestone: "已完成，待复盘归档", milestones: [{ date: "9月2日", title: "节目联排", owner: "文艺部", done: true }, { date: "9月5日", title: "设备与场地验收", owner: "运维部", done: true }, { date: "9月6日", title: "正式演出", owner: "全体协作部门", done: true }, { date: "9月8日", title: "新闻稿与素材归档", owner: "新媒体中心", done: true }] },
-];
+] as const;
+
+export const activityCatalog: ActivityRecord[] = legacyActivityCatalog.map((activity) => ({
+  ...activity,
+  state: normalizeActivityStage(activity.state) ?? "草稿",
+  departments: [...activity.departments],
+  milestones: activity.milestones.map((milestone) => ({ ...milestone })),
+}));
 
 export const taskTypes = [
   { name: "物资制作", note: "横幅、海报、采购与制作", icon: PackageCheck },
@@ -311,12 +319,13 @@ export const initialTasks: Task[] = [
 
 export const filters = ["全部任务", "待开始", "进行中", "待验收", "已完成"];
 
-export type ViewKey = "overview" | "activities" | "tasks" | "organization" | "archive" | "accounts" | "audit" | "settings";
+export type ViewKey = "overview" | "activities" | "tasks" | "departmentServices" | "organization" | "archive" | "accounts" | "audit" | "settings";
 
 export const viewTitles: Record<ViewKey, { parent: string; title: string }> = {
   overview: { parent: "工作台", title: "主席总览" },
   activities: { parent: "业务管理", title: "活动管理" },
   tasks: { parent: "业务管理", title: "任务中心" },
+  departmentServices: { parent: "业务管理", title: "部门办事中心" },
   organization: { parent: "基础数据", title: "组织与成员" },
   archive: { parent: "知识沉淀", title: "资料归档" },
   accounts: { parent: "系统管理", title: "账号与权限" },
@@ -387,7 +396,7 @@ export const fallbackAssignees: Record<string, { name: string; position: string;
 };
 
 export type UserRole = "admin" | "chair" | "leader" | "staff" | "teacher";
-export type NotificationEntity = { type: "task" | "subtask" | "activity" | "account" | "archive" | "system"; id?: string | number; parentTaskId?: number };
+export type NotificationEntity = { type: "task" | "subtask" | "activity" | "officeRequest" | "purchase" | "lostFound" | "account" | "archive" | "system"; id?: string | number; parentTaskId?: number };
 export type NotificationRecord = {
   id: string;
   recipientUsernames: string[];

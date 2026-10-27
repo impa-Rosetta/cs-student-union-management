@@ -2,10 +2,11 @@
 // 部门列表与里程碑以 JSON 列保存（后续可拆为 activity_departments 等表）。
 
 import { getDb } from "./db.ts";
+import { normalizeActivityStage, type ActivityStage } from "./activity-workflow/state-machine.ts";
 
 const db = getDb();
 
-export type ActivityEntity = Record<string, unknown> & { id: string };
+export type ActivityEntity = Record<string, unknown> & { id: string; state?: ActivityStage | string };
 
 interface ActivityRow {
   id: string;
@@ -66,7 +67,7 @@ function rowToActivity(row: ActivityRow): ActivityEntity {
     id: row.id,
     name: row.name,
     category: row.category,
-    state: row.state,
+    state: normalizeActivityStage(row.state) ?? "草稿",
     date: row.date,
     day: row.day,
     month: row.month,
@@ -90,6 +91,12 @@ export async function listActivities(): Promise<ActivityEntity[]> {
   return (result.results || []).map(rowToActivity);
 }
 
+export async function getActivity(id: string): Promise<ActivityEntity | null> {
+  await ensureActivitySchema();
+  const row = await db.prepare("SELECT * FROM activities WHERE id = ? LIMIT 1").bind(id).first<ActivityRow>();
+  return row ? rowToActivity(row) : null;
+}
+
 export async function upsertActivities(activities: ActivityEntity[]): Promise<void> {
   if (!activities.length) return;
   await ensureActivitySchema();
@@ -101,7 +108,7 @@ export async function upsertActivities(activities: ActivityEntity[]): Promise<vo
         activity.id,
         String(activity.name ?? ""),
         String(activity.category ?? ""),
-        String(activity.state ?? ""),
+        normalizeActivityStage(activity.state) ?? "草稿",
         String(activity.date ?? ""),
         String(activity.day ?? ""),
         String(activity.month ?? ""),

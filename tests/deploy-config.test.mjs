@@ -69,3 +69,19 @@ test("部署配置：Caddy 反向代理目标与应用服务端口一致", async
   const compose = await read("deploy/docker-compose.yml");
   assert.match(compose, /^\s{2}app:/m, "compose 应存在 app 服务供 Caddy 解析 app 主机名");
 });
+
+test("构建配置：不依赖被忽略的生成目录", async () => {
+  const viteConfig = await read("vite.config.ts");
+  assert.doesNotMatch(
+    viteConfig,
+    /["']\.\/build\//,
+    "Vite 配置不应导入被 .gitignore 排除、无法随仓库分发的 build 目录",
+  );
+  assert.match(
+    viteConfig,
+    /["']\.\/platform\/sites-vite-plugin["']/,
+    "Vite 配置应使用可提交的平台兼容插件",
+  );
+  const plugin = await read("platform/sites-vite-plugin.ts");
+  assert.match(plugin, /name:\s*["']student-union-sites-compat["']/);
+});

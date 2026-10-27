@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { type AnySQLiteColumn, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { type AnySQLiteColumn, index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const terms = sqliteTable("terms", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -132,6 +132,50 @@ export const activities = sqliteTable("activities", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const officeRequests = sqliteTable("office_requests", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  status: text("status").notNull(),
+  requesterUsername: text("requester_username").notNull(),
+  requesterName: text("requester_name").notNull(),
+  requesterDepartment: text("requester_department").notNull(),
+  activityId: text("activity_id").notNull().default(""),
+  activityName: text("activity_name").notNull().default(""),
+  deadline: text("deadline").notNull().default(""),
+  description: text("description").notNull().default(""),
+  detailsJson: text("details_json").notNull().default("{}"),
+  materialsJson: text("materials_json").notNull().default("[]"),
+  attachmentsJson: text("attachments_json").notNull().default("[]"),
+  externalPlatform: text("external_platform").notNull().default(""),
+  externalReference: text("external_reference").notNull().default(""),
+  handlerName: text("handler_name").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_office_requests_status").on(table.status, table.updatedAt)]);
+
+export const officeRequestEvents = sqliteTable("office_request_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  requestId: text("request_id").notNull(),
+  action: text("action").notNull(),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  actorName: text("actor_name").notNull(),
+  note: text("note").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_office_request_events_request").on(table.requestId, table.id)]);
+
+export const purchaseRequests = sqliteTable("purchase_requests", {
+  id:text("id").primaryKey(),title:text("title").notNull(),status:text("status").notNull(),requesterUsername:text("requester_username").notNull(),requesterName:text("requester_name").notNull(),requesterDepartment:text("requester_department").notNull(),activityId:text("activity_id").notNull().default(""),activityName:text("activity_name").notNull().default(""),purpose:text("purpose").notNull().default(""),expectedAt:text("expected_at").notNull().default(""),estimatedTotal:real("estimated_total").notNull().default(0),actualTotal:real("actual_total").notNull().default(0),payee:text("payee").notNull().default(""),supplier:text("supplier").notNull().default(""),orderNumber:text("order_number").notNull().default(""),handlerName:text("handler_name").notNull().default(""),officeRequestId:text("office_request_id").unique(),attachmentsJson:text("attachments_json").notNull().default("[]"),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),updatedAt:text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table)=>[index("idx_purchase_requests_status").on(table.status,table.updatedAt)]);
+export const purchaseItems = sqliteTable("purchase_items", {id:integer("id").primaryKey({autoIncrement:true}),purchaseId:text("purchase_id").notNull(),name:text("name").notNull(),imageUrl:text("image_url").notNull().default(""),productUrl:text("product_url").notNull().default(""),quantity:integer("quantity").notNull().default(1),estimatedUnitPrice:real("estimated_unit_price").notNull().default(0),note:text("note").notNull().default("")},(table)=>[index("idx_purchase_items_purchase").on(table.purchaseId)]);
+export const purchaseEvents = sqliteTable("purchase_events", {id:integer("id").primaryKey({autoIncrement:true}),purchaseId:text("purchase_id").notNull(),action:text("action").notNull(),fromStatus:text("from_status").notNull(),toStatus:text("to_status").notNull(),actorName:text("actor_name").notNull(),note:text("note").notNull().default(""),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)},(table)=>[index("idx_purchase_events_purchase").on(table.purchaseId,table.id)]);
+export const dormRooms = sqliteTable("dorm_rooms", {id:integer("id").primaryKey({autoIncrement:true}),building:text("building").notNull(),floor:text("floor").notNull().default(""),roomNumber:text("room_number").notNull(),leaderName:text("leader_name").notNull().default(""),contact:text("contact").notNull().default(""),residentCount:integer("resident_count").notNull().default(0),note:text("note").notNull().default(""),active:integer("active",{mode:"boolean"}).notNull().default(true),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),updatedAt:text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)},(table)=>[uniqueIndex("idx_dorm_rooms_unique").on(table.building,table.roomNumber)]);
+export const dormInspectionBatches = sqliteTable("dorm_inspection_batches", {id:text("id").primaryKey(),name:text("name").notNull(),status:text("status").notNull(),plannedDate:text("planned_date").notNull().default(""),leaderName:text("leader_name").notNull().default(""),inspectorsJson:text("inspectors_json").notNull().default("[]"),roomIdsJson:text("room_ids_json").notNull().default("[]"),scoringNote:text("scoring_note").notNull().default(""),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),updatedAt:text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)},(table)=>[index("idx_inspection_batches_status").on(table.status,table.updatedAt)]);
+export const dormInspectionRecords = sqliteTable("dorm_inspection_records", {id:integer("id").primaryKey({autoIncrement:true}),batchId:text("batch_id").notNull(),roomId:integer("room_id").notNull(),hygieneScore:integer("hygiene_score").notNull().default(0),tidinessScore:integer("tidiness_score").notNull().default(0),safetyScore:integer("safety_score").notNull().default(0),issueNote:text("issue_note").notNull().default(""),photosJson:text("photos_json").notNull().default("[]"),needsRectification:integer("needs_rectification",{mode:"boolean"}).notNull().default(false),rectificationDeadline:text("rectification_deadline").notNull().default(""),rectificationNote:text("rectification_note").notNull().default(""),reviewResult:text("review_result").notNull().default(""),reviewPhotosJson:text("review_photos_json").notNull().default("[]"),inspectorName:text("inspector_name").notNull().default(""),inspectedAt:text("inspected_at").notNull().default(""),reviewerName:text("reviewer_name").notNull().default(""),reviewedAt:text("reviewed_at").notNull().default("")},(table)=>[uniqueIndex("idx_inspection_record_unique").on(table.batchId,table.roomId),index("idx_inspection_records_batch").on(table.batchId,table.roomId)]);
+export const lostFoundItems = sqliteTable("lost_found_items", {id:text("id").primaryKey(),name:text("name").notNull(),category:text("category").notNull().default(""),status:text("status").notNull(),foundLocation:text("found_location").notNull().default(""),foundAt:text("found_at").notNull().default(""),storageLocation:text("storage_location").notNull().default(""),publicDescription:text("public_description").notNull().default(""),secretFeature:text("secret_feature").notNull().default(""),photosJson:text("photos_json").notNull().default("[]"),registrantUsername:text("registrant_username").notNull(),registrantName:text("registrant_name").notNull(),publishUrl:text("publish_url").notNull().default(""),claimantName:text("claimant_name").notNull().default(""),claimantStudentNo:text("claimant_student_no").notNull().default(""),claimantContact:text("claimant_contact").notNull().default(""),verificationNote:text("verification_note").notNull().default(""),handlerName:text("handler_name").notNull().default(""),claimedAt:text("claimed_at").notNull().default(""),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),updatedAt:text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`)},(table)=>[index("idx_lost_found_status").on(table.status,table.updatedAt)]);
+export const lostFoundEvents = sqliteTable("lost_found_events", {id:integer("id").primaryKey({autoIncrement:true}),itemId:text("item_id").notNull(),action:text("action").notNull(),fromStatus:text("from_status").notNull(),toStatus:text("to_status").notNull(),actorName:text("actor_name").notNull(),note:text("note").notNull().default(""),createdAt:text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`)},(table)=>[index("idx_lost_found_events_item").on(table.itemId,table.id)]);
 
 export const archiveRecords = sqliteTable("archive_records", {
   id: text("id").primaryKey(),
