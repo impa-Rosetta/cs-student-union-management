@@ -11,6 +11,37 @@ import { recordWorkflowEvent } from "../../workflow-events.ts";
 
 const db = getDb();
 
+const materialTemplates: Record<OfficeRequestType, OfficeMaterial[]> = {
+  venue: [
+    { key: "activity", label: "活动或会议安排已确认", checked: false },
+    { key: "contact", label: "现场联系人及电话已确认", checked: false },
+    { key: "equipment", label: "教室设备需求已核对", checked: false },
+  ],
+  reimbursement: [
+    { key: "requisition", label: "领用单", checked: false },
+    { key: "invoice", label: "发票已签名", checked: false },
+    { key: "order", label: "订单或购买记录截图", checked: false },
+    { key: "activityProof", label: "活动证明截图（活动类费用）", checked: false },
+    { key: "handwriting", label: "奖品领用人姓名、学号已手写", checked: false },
+  ],
+};
+
+function normalizeMaterials(type: OfficeRequestType, materials?: OfficeMaterial[]) {
+  const selected = new Map((materials || []).map((item) => [item.key, Boolean(item.checked)]));
+  return materialTemplates[type].map((item) => ({ ...item, checked: selected.get(item.key) || false }));
+}
+
+function validateOfficeFields(type: OfficeRequestType, title: string, details: OfficeRequestDetails) {
+  if (!title.trim()) return "申请标题不能为空";
+  if (type === "venue") {
+    const attendees = details.attendeeCount ? Number(details.attendeeCount) : 0;
+    if (details.attendeeCount && (!Number.isFinite(attendees) || attendees <= 0)) return "预计人数必须为正数";
+    if (details.startTime && details.endTime && details.endTime < details.startTime) return "使用结束时间不能早于开始时间";
+  }
+  if (type === "reimbursement" && details.amount && (!Number.isFinite(Number(details.amount)) || Number(details.amount) <= 0)) return "报销金额必须大于零";
+  return "";
+}
+
 async function notifyUsers(item: OfficeRequest, actorUsername: string, status: string) {
   const accounts = await db.prepare("SELECT username, role, department, active FROM app_accounts WHERE active = 1")
     .all<{ username: string; role: string; department: string; active: number }>();
@@ -49,12 +80,14 @@ export async function POST(request: Request) {
     if (!body.type || !["venue", "reimbursement"].includes(body.type) || !body.title?.trim()) {
       return Response.json({ error: "申请类型和标题不能为空" }, { status: 400 });
     }
+    const validationError = validateOfficeFields(body.type, body.title, body.details || {});
+    if (validationError) return Response.json({ error: validationError }, { status: 400 });
     const now = new Date().toISOString();
     const item: OfficeRequest = {
       id: `office-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, type: body.type, title: body.title.trim(), status: "草稿",
       requesterUsername: auth.user.username, requesterName: auth.user.name, requesterDepartment: auth.user.department,
       activityId: body.activityId || "", activityName: body.activityName || "非活动事项", deadline: body.deadline || "",
-      description: body.description?.trim() || "", details: body.details || {}, materials: body.materials || [],
+      description: body.description?.trim() || "", details: body.details || {}, materials: normalizeMaterials(body.type, body.materials),
       attachments: body.attachments || [], externalPlatform: "", externalReference: "", handlerName: "", createdAt: now, updatedAt: now,
     };
     await upsertOfficeRequest(item);
@@ -66,10 +99,35 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const auth = await requireRole(request, ["admin", "chair", "leader", "staff"]);
-    const body = (await request.json()) as { id?: string; action?: OfficeRequestAction; note?: string; externalPlatform?: string; externalReference?: string };
+    const body = (await request.json()) as { id?: string; action?: OfficeRequestAction | "update"; note?: string; externalPlatform?: string; externalReference?: string; data?: Partial<Pick<OfficeRequest, "title" | "activityId" | "activityName" | "deadline" | "description" | "details" | "materials" | "attachments">> };
     if (!body.id || !body.action) return Response.json({ error: "申请编号和操作不能为空" }, { status: 400 });
     const item = await getOfficeRequest(body.id);
     if (!item) return Response.json({ error: "办公室申请不存在" }, { status: 404 });
+    if (body.action === "update") {
+      if (item.requesterUsername !== auth.user.username) return Response.json({ error: "只有申请人可以修改申请" }, { status: 403 });
+      if (item.status !== "草稿" && item.status !== "待补充材料") return Response.json({ error: `当前状态为“${item.status}”，不能修改申请内容` }, { status: 409 });
+      const data = body.data || {};
+      const title = data.title?.trim() || "";
+      const details = data.details || {};
+      const validationError = validateOfficeFields(item.type, title, details);
+      if (validationError) return Response.json({ error: validationError }, { status: 400 });
+      const saved: OfficeRequest = {
+        ...item,
+        title,
+        activityId: data.activityId || "",
+        activityName: data.activityName || "非活动事项",
+        deadline: data.deadline || "",
+        description: data.description?.trim() || "",
+        details,
+        materials: normalizeMaterials(item.type, data.materials),
+        attachments: Array.isArray(data.attachments) ? data.attachments : [],
+        updatedAt: new Date().toISOString(),
+      };
+      await upsertOfficeRequest(saved);
+      await addOfficeRequestEvent({ requestId: item.id, action: "update", fromStatus: item.status, toStatus: item.status, actorName: auth.user.name, note: "申请人更新申请内容与材料" });
+      await recordWorkflowEvent({ entityType: "office_request", entityId: item.id, action: "update", fromStatus: item.status, toStatus: item.status, reason: "申请人更新申请内容与材料" }, auth.user.name, auth.user.role);
+      return Response.json({ ok: true, item: saved, events: await listOfficeRequestEvents(item.id) });
+    }
     const transition = officeRequestTransition(item.status, body.action, {
       role: auth.user.role, department: auth.user.department, username: auth.user.username, requesterUsername: item.requesterUsername,
     });

@@ -46,6 +46,16 @@ export async function createPurchase(item: PurchaseRequest) {
   if (item.items.length) await db.batch(item.items.map((part) => db.prepare("INSERT INTO purchase_items (purchase_id,name,image_url,product_url,quantity,estimated_unit_price,note) VALUES (?,?,?,?,?,?,?)").bind(item.id,part.name,part.imageUrl,part.productUrl,part.quantity,part.estimatedUnitPrice,part.note)));
 }
 export async function updatePurchase(item: PurchaseRequest) { await ensureLifeDepartmentSchema(); await db.prepare(`UPDATE purchase_requests SET status=?,actual_total=?,payee=?,supplier=?,order_number=?,handler_name=?,office_request_id=?,attachments_json=?,updated_at=? WHERE id=?`).bind(item.status,item.actualTotal,item.payee,item.supplier,item.orderNumber,item.handlerName,item.officeRequestId || null,JSON.stringify(item.attachments),item.updatedAt,item.id).run(); }
+export async function updatePurchaseContent(item: PurchaseRequest) {
+  await ensureLifeDepartmentSchema();
+  await db.batch([
+    db.prepare(`UPDATE purchase_requests SET title=?,activity_id=?,activity_name=?,purpose=?,expected_at=?,estimated_total=?,payee=?,attachments_json=?,updated_at=? WHERE id=?`)
+      .bind(item.title,item.activityId,item.activityName,item.purpose,item.expectedAt,item.estimatedTotal,item.payee,JSON.stringify(item.attachments),item.updatedAt,item.id),
+    db.prepare("DELETE FROM purchase_items WHERE purchase_id=?").bind(item.id),
+    ...item.items.map((part) => db.prepare("INSERT INTO purchase_items (purchase_id,name,image_url,product_url,quantity,estimated_unit_price,note) VALUES (?,?,?,?,?,?,?)")
+      .bind(item.id,part.name,part.imageUrl,part.productUrl,part.quantity,part.estimatedUnitPrice,part.note)),
+  ]);
+}
 export async function addPurchaseEvent(event: Omit<LifeEvent,"id"|"createdAt">) { await ensureLifeDepartmentSchema(); await db.prepare("INSERT INTO purchase_events (purchase_id,action,from_status,to_status,actor_name,note) VALUES (?,?,?,?,?,?)").bind(event.entityId,event.action,event.fromStatus,event.toStatus,event.actorName,event.note).run(); }
 
 export async function listRooms(): Promise<DormRoom[]> { await ensureLifeDepartmentSchema(); const rows=await db.prepare("SELECT * FROM dorm_rooms ORDER BY building,floor,room_number").all<Record<string,unknown>>(); return rows.results.map((r)=>({id:Number(r.id),building:String(r.building),floor:String(r.floor),roomNumber:String(r.room_number),leaderName:String(r.leader_name),contact:String(r.contact),residentCount:Number(r.resident_count),note:String(r.note),active:Boolean(r.active),createdAt:String(r.created_at)})); }

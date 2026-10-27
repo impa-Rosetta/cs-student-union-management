@@ -6,7 +6,7 @@ import { recordWorkflowEvent } from "../../workflow-events.ts";
 import {
   addLostFoundEvent, addPurchaseEvent, createBatch, createLostFound, createPurchase, createRoom, getBatch, getLostFound, getPurchase,
   listBatches, listInspectionRecords, listLifeEvents, listLostFound, listPurchases, listRooms, updateBatch, updateLostFound,
-  updatePurchase, upsertInspectionRecord, type DormRoom, type InspectionBatch, type InspectionRecord, type LostFoundItem,
+  updatePurchase, updatePurchaseContent, upsertInspectionRecord, type DormRoom, type InspectionBatch, type InspectionRecord, type LostFoundItem,
   type PurchaseItem, type PurchaseRequest,
 } from "../../life-department/store.ts";
 import {
@@ -18,6 +18,24 @@ import type { Attachment } from "../../product-model.ts";
 const db = getDb();
 const now = () => new Date().toISOString();
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
+
+function normalizePurchaseItems(items: PurchaseItem[]) {
+  return items.map((item) => ({
+    name: item.name?.trim() || "",
+    imageUrl: item.imageUrl?.trim() || "",
+    productUrl: item.productUrl?.trim() || "",
+    quantity: Number(item.quantity),
+    estimatedUnitPrice: Number(item.estimatedUnitPrice),
+    note: item.note?.trim() || "",
+  }));
+}
+
+function validatePurchase(title: string, purpose: string, items: PurchaseItem[]) {
+  if (!title.trim() || !purpose.trim() || !items.length) return "请填写采购标题、用途和至少一项有效物品";
+  if (items.some((item) => !item.name || !Number.isInteger(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.estimatedUnitPrice) || item.estimatedUnitPrice < 0)) return "采购明细的名称、数量或预算单价无效";
+  if (items.some((item) => !item.imageUrl && !item.productUrl)) return "每项物品至少需要商品图片或商品链接";
+  return "";
+}
 
 async function notify(options: { department?: string; roles?: string[]; usernames?: string[]; actor: string; title: string; detail: string; type: string; id: string; level?: "info"|"success"|"warning" }) {
   const rows = await db.prepare("SELECT username,role,department FROM app_accounts WHERE active=1").all<{username:string;role:string;department:string}>();
@@ -44,9 +62,9 @@ export async function POST(request: Request) {
   try {
     const auth=await requireRole(request,["admin","chair","leader","staff"]); const body=await request.json() as Record<string,unknown>; const kind=String(body.kind||"");
     if(kind==="purchase"){
-      const input=body.purchase as Partial<PurchaseRequest>|undefined; const items=(body.items as PurchaseItem[])||[];
-      if(!input?.title?.trim()||!input.purpose?.trim()||!items.length||items.some((item)=>!item.name?.trim()||Number(item.quantity)<=0))return Response.json({error:"请填写采购标题、用途和至少一项有效物品"},{status:400});
-      const timestamp=now(); const purchase:PurchaseRequest={id:newId("purchase"),title:input.title.trim(),status:"草稿",requesterUsername:auth.user.username,requesterName:auth.user.name,requesterDepartment:auth.user.department,activityId:input.activityId||"",activityName:input.activityName||"非活动事项",purpose:input.purpose.trim(),expectedAt:input.expectedAt||"",estimatedTotal:items.reduce((sum,item)=>sum+Number(item.quantity)*Number(item.estimatedUnitPrice),0),actualTotal:0,payee:input.payee||auth.user.name,supplier:"",orderNumber:"",handlerName:"",officeRequestId:"",attachments:(input.attachments||[]) as Attachment[],items:items.map((item)=>({...item,quantity:Number(item.quantity),estimatedUnitPrice:Number(item.estimatedUnitPrice)})),createdAt:timestamp,updatedAt:timestamp};
+      const input=(body.purchase as Partial<PurchaseRequest>|undefined)||{}; const items=normalizePurchaseItems((body.items as PurchaseItem[])||[]);const title=input.title||"";const purpose=input.purpose||"";
+      const validationError=validatePurchase(title,purpose,items);if(validationError)return Response.json({error:validationError},{status:400});
+      const timestamp=now(); const purchase:PurchaseRequest={id:newId("purchase"),title:title.trim(),status:"草稿",requesterUsername:auth.user.username,requesterName:auth.user.name,requesterDepartment:auth.user.department,activityId:input.activityId||"",activityName:input.activityName||"非活动事项",purpose:purpose.trim(),expectedAt:input.expectedAt||"",estimatedTotal:items.reduce((sum,item)=>sum+Number(item.quantity)*Number(item.estimatedUnitPrice),0),actualTotal:0,payee:input.payee||auth.user.name,supplier:"",orderNumber:"",handlerName:"",officeRequestId:"",attachments:(input.attachments||[]) as Attachment[],items:items.map((item)=>({...item,quantity:Number(item.quantity),estimatedUnitPrice:Number(item.estimatedUnitPrice)})),createdAt:timestamp,updatedAt:timestamp};
       await createPurchase(purchase);await addPurchaseEvent({entityId:purchase.id,action:"create",fromStatus:"",toStatus:"草稿",actorName:auth.user.name,note:"创建采购申请"});return Response.json({ok:true,item:purchase},{status:201});
     }
     if(kind==="room"){
@@ -75,7 +93,15 @@ export async function PATCH(request:Request){
   try{
     const auth=await requireRole(request,["admin","chair","leader","staff"]);const body=await request.json() as {kind?:string;id?:string;action?:string;note?:string;data?:Record<string,unknown>};if(!body.kind||!body.id||!body.action)return Response.json({error:"业务类型、编号和操作不能为空"},{status:400});const note=body.note?.trim()||"";const data=body.data||{};
     if(body.kind==="purchase"){
-      const item=await getPurchase(body.id);if(!item)return Response.json({error:"采购申请不存在"},{status:404});const result=purchaseTransition(item.status,body.action as PurchaseAction,auth.user,item.requesterUsername);if(!result.ok)return Response.json({error:result.reason},{status:result.reason.startsWith("只有")?403:409});if(["return","reject","reopen"].includes(body.action)&&!note)return Response.json({error:"该操作必须填写原因"},{status:400});
+      const item=await getPurchase(body.id);if(!item)return Response.json({error:"采购申请不存在"},{status:404});
+      if(body.action==="update"){
+        if(item.requesterUsername!==auth.user.username)return Response.json({error:"只有申请人可以修改采购申请"},{status:403});
+        if(item.status!=="草稿"&&item.status!=="待补充材料")return Response.json({error:`当前状态为“${item.status}”，不能修改采购申请`},{status:409});
+        const items=normalizePurchaseItems((data.items as PurchaseItem[])||[]);const title=String(data.title||"").trim();const purpose=String(data.purpose||"").trim();const validationError=validatePurchase(title,purpose,items);if(validationError)return Response.json({error:validationError},{status:400});
+        const saved:PurchaseRequest={...item,title,purpose,activityId:String(data.activityId||""),activityName:String(data.activityName||"非活动事项"),expectedAt:String(data.expectedAt||""),payee:String(data.payee||auth.user.name),attachments:Array.isArray(data.attachments)?data.attachments as Attachment[]:[],items,estimatedTotal:items.reduce((sum,part)=>sum+part.quantity*part.estimatedUnitPrice,0),updatedAt:now()};
+        await updatePurchaseContent(saved);await addPurchaseEvent({entityId:item.id,action:"update",fromStatus:item.status,toStatus:item.status,actorName:auth.user.name,note:"申请人更新采购内容与材料"});await recordWorkflowEvent({entityType:"purchase_request",entityId:item.id,action:"update",fromStatus:item.status,toStatus:item.status,reason:"申请人更新采购内容与材料"},auth.user.name,auth.user.role);const events=(await listLifeEvents()).purchaseEvents.filter((event)=>event.entityId===item.id);return Response.json({ok:true,item:saved,events});
+      }
+      const result=purchaseTransition(item.status,body.action as PurchaseAction,auth.user,item.requesterUsername);if(!result.ok)return Response.json({error:result.reason},{status:result.reason.startsWith("只有")?403:409});if(["return","reject","reopen"].includes(body.action)&&!note)return Response.json({error:"该操作必须填写原因"},{status:400});
       if(body.action==="purchased"){item.actualTotal=Number(data.actualTotal||0);item.supplier=String(data.supplier||"");item.orderNumber=String(data.orderNumber||"");item.payee=String(data.payee||item.payee);item.attachments=(data.attachments as Attachment[])||item.attachments;if(item.actualTotal<=0||!item.supplier||!item.orderNumber)return Response.json({error:"请填写实际金额、供应商和订单号"},{status:400});}
       if(body.action==="transfer"){
         if(item.officeRequestId)return Response.json({error:"该采购已生成办公室报销，不能重复提交"},{status:409});if(item.actualTotal<=0)return Response.json({error:"请先登记实际采购金额"},{status:400});const timestamp=now();const office:OfficeRequest={id:newId("office-purchase"),type:"reimbursement",title:`${item.title}报销`,status:"待办公室审核",requesterUsername:item.requesterUsername,requesterName:item.requesterName,requesterDepartment:item.requesterDepartment,activityId:item.activityId,activityName:item.activityName,deadline:"",description:item.purpose,details:{amount:String(item.actualTotal),expenseCategory:"活动物资",payee:item.payee,budgetItem:item.title,purchaseRequestId:item.id,supplier:item.supplier,orderNumber:item.orderNumber},materials:[{key:"invoice",label:"发票已签名",checked:item.attachments.length>0},{key:"order",label:"订单或购买记录截图",checked:item.attachments.length>0}],attachments:item.attachments,externalPlatform:"",externalReference:"",handlerName:"",createdAt:timestamp,updatedAt:timestamp};await upsertOfficeRequest(office);await addOfficeRequestEvent({requestId:office.id,action:"createdFromPurchase",fromStatus:"",toStatus:"待办公室审核",actorName:auth.user.name,note:`由采购申请 ${item.id} 自动生成`});item.officeRequestId=office.id;await notify({department:"办公室",roles:["admin","chair"],actor:auth.user.username,title:"生活部采购待报销",detail:`${item.title}已完成采购，请审核报销材料。`,type:"officeRequest",id:office.id,level:"warning"});

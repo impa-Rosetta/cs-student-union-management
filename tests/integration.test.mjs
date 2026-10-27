@@ -275,14 +275,101 @@ test("办公室办事：普通部门成员不能受理，教师不能创建", as
   assert.equal(res.status, 403);
 });
 
+test("办公室办事：申请人可修改草稿和退回申请，其他人及审核中不可修改", async () => {
+  let res = await officeRequestsRoute.POST(requestFor("leader@demo.local", { method: "POST", path: "/api/office-requests", body: {
+    type: "reimbursement", title: "待补充的报销", details: { amount: "120", expenseCategory: "活动物资" },
+  } }));
+  assert.equal(res.status, 201);
+  let body = await res.json();
+  const id = body.item.id;
+  const attachment = { key: "office/test-proof.pdf", name: "报销凭证.pdf", type: "application/pdf", size: 1024 };
+
+  res = await officeRequestsRoute.PATCH(requestFor("staff@demo.local", { method: "PATCH", path: "/api/office-requests", body: {
+    id, action: "update", data: { title: "越权修改" },
+  } }));
+  assert.equal(res.status, 403);
+
+  res = await officeRequestsRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/office-requests", body: {
+    id, action: "update", data: {
+      title: "已补充的报销", description: "补充费用用途", details: { amount: "128.50", expenseCategory: "活动物资", payee: "负责人" },
+      materials: [{ key: "invoice", label: "发票或票据", checked: true }], attachments: [attachment],
+    },
+  } }));
+  assert.equal(res.status, 200);
+  body = await res.json();
+  assert.equal(body.item.title, "已补充的报销");
+  assert.equal(body.item.details.amount, "128.50");
+  assert.deepEqual(body.item.attachments, [attachment]);
+  assert.equal(body.events[0].action, "update");
+
+  res = await officeRequestsRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/office-requests", body: { id, action: "submit" } }));
+  assert.equal(res.status, 200);
+  res = await officeRequestsRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/office-requests", body: {
+    id, action: "update", data: { title: "审核中不应改变" },
+  } }));
+  assert.equal(res.status, 409);
+
+  res = await officeRequestsRoute.PATCH(requestFor("chair@demo.local", { method: "PATCH", path: "/api/office-requests", body: { id, action: "return", note: "请补充签字" } }));
+  assert.equal(res.status, 200);
+  res = await officeRequestsRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/office-requests", body: {
+    id, action: "update", data: { title: "退回后再次补充", details: { amount: "128.50", expenseCategory: "活动物资", payee: "负责人" }, materials: [{ key: "invoice", label: "发票或票据", checked: true }], attachments: [attachment] },
+  } }));
+  assert.equal(res.status, 200);
+});
+
 test("生活部：采购申请可完成采购并唯一转交办公室报销", async () => {
-  let res=await lifeDepartmentRoute.POST(requestFor("leader@demo.local",{method:"POST",path:"/api/life-department",body:{kind:"purchase",purchase:{title:"活动矿泉水采购",purpose:"活动现场饮用",activityName:"测试活动",payee:"负责人"},items:[{name:"矿泉水",quantity:2,estimatedUnitPrice:30,imageUrl:"",productUrl:"",note:""}]}}));
+  let res=await lifeDepartmentRoute.POST(requestFor("leader@demo.local",{method:"POST",path:"/api/life-department",body:{kind:"purchase",purchase:{title:"活动矿泉水采购",purpose:"活动现场饮用",activityName:"测试活动",payee:"负责人"},items:[{name:"矿泉水",quantity:2,estimatedUnitPrice:30,imageUrl:"",productUrl:"https://example.com/water",note:""}]}}));
   assert.equal(res.status,201);let body=await res.json();const id=body.item.id;
   res=await lifeDepartmentRoute.PATCH(requestFor("leader@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"purchase",id,action:"submit"}}));assert.equal(res.status,200);
   res=await lifeDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"purchase",id,action:"approve"}}));assert.equal(res.status,200);
   res=await lifeDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"purchase",id,action:"purchased",data:{actualTotal:58,supplier:"校园超市",orderNumber:"ORD-001",payee:"负责人"}}}));assert.equal(res.status,200);
   res=await lifeDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/life-department",body:{kind:"purchase",id,action:"transfer"}}));assert.equal(res.status,200);body=await res.json();assert.equal(body.item.status,"待办公室报销");assert.ok(body.item.officeRequestId);
   const office=await officeRequestsRoute.GET(requestFor("chair@demo.local",{path:"/api/office-requests"}));const officeBody=await office.json();assert.ok(officeBody.items.some((item)=>item.id===body.item.officeRequestId&&item.details.purchaseRequestId===id));
+});
+
+test("生活部：申请人可修改采购草稿并由服务端重算预算", async () => {
+  let res = await lifeDepartmentRoute.POST(requestFor("leader@demo.local", { method: "POST", path: "/api/life-department", body: {
+    kind: "purchase", purchase: { title: "采购草稿", purpose: "测试编辑", activityName: "非活动事项" },
+    items: [{ name: "签字笔", quantity: 2, estimatedUnitPrice: 3, imageUrl: "", productUrl: "https://example.com/pen", note: "黑色" }],
+  } }));
+  assert.equal(res.status, 201);
+  let body = await res.json();
+  const id = body.item.id;
+  const attachment = { key: "purchase/spec.pdf", name: "采购说明.pdf", type: "application/pdf", size: 2048 };
+
+  res = await lifeDepartmentRoute.PATCH(requestFor("staff@demo.local", { method: "PATCH", path: "/api/life-department", body: {
+    kind: "purchase", id, action: "update", data: { title: "越权修改", purpose: "无效", items: [] },
+  } }));
+  assert.equal(res.status, 403);
+
+  res = await lifeDepartmentRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/life-department", body: {
+    kind: "purchase", id, action: "update", data: {
+      title: "办公用品采购", purpose: "会议签到使用", activityId: "", activityName: "非活动事项", expectedAt: "2026-11-01", payee: "负责人",
+      attachments: [attachment],
+      items: [
+        { name: "签字笔", quantity: 10, estimatedUnitPrice: 2.5, imageUrl: "", productUrl: "https://example.com/pen", note: "黑色" },
+        { name: "文件袋", quantity: 5, estimatedUnitPrice: 4, imageUrl: "files/product-bag.png", productUrl: "", note: "A4" },
+      ],
+    },
+  } }));
+  assert.equal(res.status, 200);
+  body = await res.json();
+  assert.equal(body.item.estimatedTotal, 45);
+  assert.equal(body.item.items.length, 2);
+  assert.deepEqual(body.item.attachments, [attachment]);
+  assert.equal(body.events[0].action, "update");
+
+  res = await lifeDepartmentRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/life-department", body: {
+    kind: "purchase", id, action: "update", data: { title: "无效采购", purpose: "缺少来源", items: [{ name: "胶带", quantity: 1, estimatedUnitPrice: 5, imageUrl: "", productUrl: "", note: "" }] },
+  } }));
+  assert.equal(res.status, 400);
+
+  res = await lifeDepartmentRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/life-department", body: { kind: "purchase", id, action: "submit" } }));
+  assert.equal(res.status, 200);
+  res = await lifeDepartmentRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", path: "/api/life-department", body: {
+    kind: "purchase", id, action: "update", data: { title: "审核中不应改变", purpose: "无效", items: [{ name: "胶带", quantity: 1, estimatedUnitPrice: 5, imageUrl: "x", productUrl: "", note: "" }] },
+  } }));
+  assert.equal(res.status, 409);
 });
 
 test("生活部：寝室档案、查寝评分和归档闭环", async () => {

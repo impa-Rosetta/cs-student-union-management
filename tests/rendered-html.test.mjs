@@ -126,6 +126,10 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /失物招领/);
   assert.match(page, /api\/life-department/);
   assert.match(page, /api\/office-requests/);
+  assert.match(page, /编辑申请/);
+  assert.match(page, /保存并提交/);
+  assert.match(page, /商品链接或上传图片/);
+  assert.match(page, /purchase-attachment-list/);
   assert.match(page, /api\/activities/);
   assert.match(page, /api\/archive/);
   assert.match(page, /学生联盟审计日志\.csv/);
