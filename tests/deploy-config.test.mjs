@@ -85,3 +85,21 @@ test("构建配置：不依赖被忽略的生成目录", async () => {
   const plugin = await read("platform/sites-vite-plugin.ts");
   assert.match(plugin, /name:\s*["']student-union-sites-compat["']/);
 });
+
+test("持续集成：本地与 GitHub Actions 使用同一套 Node 22 兼容检查", async () => {
+  const packageJson = JSON.parse(await read("package.json"));
+  assert.equal(
+    packageJson.scripts.check,
+    "npm run typecheck && npm run lint && npm test",
+    "应提供统一的 npm run check 入口",
+  );
+  assert.doesNotMatch(
+    packageJson.scripts.test,
+    /--test-isolation/,
+    "Node 22 不支持 --test-isolation 参数",
+  );
+
+  const workflow = await read(".github/workflows/ci.yml");
+  assert.match(workflow, /- run: npm ci/, "CI 应使用锁文件安装依赖");
+  assert.match(workflow, /- run: npm run check/, "CI 应调用统一检查入口");
+});
