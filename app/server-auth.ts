@@ -95,26 +95,8 @@ function toUser(row: AccountRow): AuthenticatedUser {
 
 export async function currentUser(request: Request, options: { allowLocal?: boolean } = {}) {
   await ensurePlatformSchema();
-  if (isLocalRequest(request) && options.allowLocal !== false) {
-    return {
-      localMode: true,
-      authMethod: "local" as const,
-      user: {
-        id: 0,
-        externalUserId: "local-development",
-        email: "local@localhost",
-        username: "admin",
-        name: "本地开发管理员",
-        role: "admin" as AppRole,
-        department: "系统管理",
-        title: "系统管理员",
-        scope: "全部数据",
-        active: true,
-      },
-    };
-  }
-
-  // 1) 服务端会话 Cookie（自托管密码登录）。
+  // 1) 服务端会话 Cookie（自托管密码登录）。即使在 localhost，也优先使用
+  // 已登录账号，方便按真实角色测试；没有会话时再回退到本地管理员。
   const sessionToken = getCookie(request, "session");
   if (sessionToken) {
     const sessionUser = await getSessionUser(sessionToken);
@@ -136,6 +118,25 @@ export async function currentUser(request: Request, options: { allowLocal?: bool
         },
       };
     }
+  }
+
+  if (isLocalRequest(request) && options.allowLocal !== false) {
+    return {
+      localMode: true,
+      authMethod: "local" as const,
+      user: {
+        id: 0,
+        externalUserId: "local-development",
+        email: "local@localhost",
+        username: "admin",
+        name: "本地开发管理员",
+        role: "admin" as AppRole,
+        department: "系统管理",
+        title: "系统管理员",
+        scope: "全部数据",
+        active: true,
+      },
+    };
   }
 
   // 2) 平台身份头（Cloudflare Sites）。

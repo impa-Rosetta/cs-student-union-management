@@ -7,6 +7,7 @@ import { insertNotifications } from "../../notification-store.ts";
 import { recordWorkflowEvent } from "../../workflow-events.ts";
 import { resolveNotification, type NotificationRecord } from "../../workflow/notifications.ts";
 import { activityNotificationDrafts } from "../../activity-workflow/notifications.ts";
+import { createVenueFromApprovedActivity } from "../../office-service/store.ts";
 import {
   activityTransition,
   normalizeActivityStage,
@@ -79,7 +80,11 @@ export async function PATCH(request: Request) {
       reason: body.reason?.trim() || body.note?.trim() || undefined,
     }, auth.user.name, auth.user.role);
 
-    return Response.json({ ok: true, activity: saved, notifications });
+    const venueRequest = body.action === "approve" && transition.next === "筹备中"
+      ? await createVenueFromApprovedActivity(saved, auth.user)
+      : null;
+
+    return Response.json({ ok: true, activity: saved, notifications, venueRequest });
   } catch (error) {
     return authErrorResponse(error, "更新活动阶段失败");
   }

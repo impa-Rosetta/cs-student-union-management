@@ -142,6 +142,8 @@ CREATE TABLE activities (
   description TEXT NOT NULL DEFAULT '',
   next_milestone TEXT NOT NULL DEFAULT '',
   milestones_json TEXT NOT NULL DEFAULT '[]',
+  needs_venue BOOLEAN NOT NULL DEFAULT FALSE,
+  venue_request_json TEXT NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -180,6 +182,27 @@ CREATE TABLE office_request_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_office_request_events_request ON office_request_events (request_id, id);
+
+CREATE TABLE venue_requests (
+  id TEXT PRIMARY KEY,status TEXT NOT NULL,source TEXT NOT NULL DEFAULT 'manual',requester_username TEXT NOT NULL,requester_name TEXT NOT NULL,requester_department TEXT NOT NULL,
+  title TEXT NOT NULL,purpose_category TEXT NOT NULL DEFAULT '',usage_departments_json TEXT NOT NULL DEFAULT '[]',usage_date TEXT NOT NULL DEFAULT '',start_time TEXT NOT NULL DEFAULT '',end_time TEXT NOT NULL DEFAULT '',attendee_count INTEGER NOT NULL DEFAULT 0,
+  room_types_json TEXT NOT NULL DEFAULT '[]',equipment_json TEXT NOT NULL DEFAULT '[]',preferred_location TEXT NOT NULL DEFAULT '',notes TEXT NOT NULL DEFAULT '',attachments_json TEXT NOT NULL DEFAULT '[]',
+  activity_id TEXT NOT NULL DEFAULT '',activity_name TEXT NOT NULL DEFAULT '',confirmed_room TEXT NOT NULL DEFAULT '',confirmed_date TEXT NOT NULL DEFAULT '',confirmed_start_time TEXT NOT NULL DEFAULT '',confirmed_end_time TEXT NOT NULL DEFAULT '',
+  office_attachments_json TEXT NOT NULL DEFAULT '[]',handling_note TEXT NOT NULL DEFAULT '',handler_name TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_venue_requests_status ON venue_requests(status,updated_at);
+CREATE UNIQUE INDEX idx_venue_requests_activity ON venue_requests(activity_id) WHERE activity_id <> '';
+CREATE TABLE venue_request_events (id SERIAL PRIMARY KEY,request_id TEXT NOT NULL,action TEXT NOT NULL,from_status TEXT NOT NULL,to_status TEXT NOT NULL,actor_name TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_venue_request_events_request ON venue_request_events(request_id,id);
+
+CREATE TABLE meeting_rounds (id TEXT PRIMARY KEY,title TEXT NOT NULL,meeting_date TEXT NOT NULL DEFAULT '',deadline TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,department_names_json TEXT NOT NULL DEFAULT '[]',created_by_name TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_meeting_rounds_status ON meeting_rounds(status,updated_at);
+CREATE TABLE meeting_reports (id TEXT PRIMARY KEY,round_id TEXT NOT NULL,department TEXT NOT NULL,status TEXT NOT NULL,last_week TEXT NOT NULL DEFAULT '',this_week TEXT NOT NULL DEFAULT '',notice_count INTEGER NOT NULL DEFAULT 0,media_count INTEGER NOT NULL DEFAULT 0,email_received INTEGER NOT NULL DEFAULT 0,email_sent INTEGER NOT NULL DEFAULT 0,meeting_attendance INTEGER NOT NULL DEFAULT 0,meeting_duration TEXT NOT NULL DEFAULT '',unplanned_workload TEXT NOT NULL DEFAULT '',submitted_by TEXT NOT NULL DEFAULT '',reviewed_by TEXT NOT NULL DEFAULT '',review_note TEXT NOT NULL DEFAULT '',submitted_at TEXT NOT NULL DEFAULT '',updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(round_id,department));
+CREATE INDEX idx_meeting_reports_round ON meeting_reports(round_id,status);
+CREATE TABLE meeting_report_events (id SERIAL PRIMARY KEY,report_id TEXT NOT NULL,action TEXT NOT NULL,from_status TEXT NOT NULL,to_status TEXT NOT NULL,actor_name TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_meeting_report_events_report ON meeting_report_events(report_id,id);
+CREATE TABLE meeting_exports (id TEXT PRIMARY KEY,round_id TEXT NOT NULL,object_key TEXT NOT NULL,file_name TEXT NOT NULL,missing_mode TEXT NOT NULL DEFAULT 'omit',generated_by TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_meeting_exports_round ON meeting_exports(round_id,created_at);
 
 CREATE TABLE purchase_requests (id TEXT PRIMARY KEY,title TEXT NOT NULL,status TEXT NOT NULL,requester_username TEXT NOT NULL,requester_name TEXT NOT NULL,requester_department TEXT NOT NULL,activity_id TEXT NOT NULL DEFAULT '',activity_name TEXT NOT NULL DEFAULT '',purpose TEXT NOT NULL DEFAULT '',expected_at TEXT NOT NULL DEFAULT '',estimated_total DOUBLE PRECISION NOT NULL DEFAULT 0,actual_total DOUBLE PRECISION NOT NULL DEFAULT 0,payee TEXT NOT NULL DEFAULT '',supplier TEXT NOT NULL DEFAULT '',order_number TEXT NOT NULL DEFAULT '',handler_name TEXT NOT NULL DEFAULT '',office_request_id TEXT UNIQUE,attachments_json TEXT NOT NULL DEFAULT '[]',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE INDEX idx_purchase_requests_status ON purchase_requests (status,updated_at);
@@ -290,3 +313,13 @@ CREATE TABLE subtasks (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_subtasks_parent ON subtasks (parent_task_id);
+
+CREATE TABLE organization_change_requests (id TEXT PRIMARY KEY,type TEXT NOT NULL,status TEXT NOT NULL,requester_username TEXT NOT NULL,requester_name TEXT NOT NULL,member_id INTEGER,member_name TEXT NOT NULL DEFAULT '',student_no TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',current_department TEXT NOT NULL DEFAULT '',current_position TEXT NOT NULL DEFAULT '',target_department TEXT NOT NULL DEFAULT '',target_position TEXT NOT NULL DEFAULT '',effective_date TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',handover TEXT NOT NULL DEFAULT '',attachments_json TEXT NOT NULL DEFAULT '[]',organization_opinion TEXT NOT NULL DEFAULT '',presidium_opinion TEXT NOT NULL DEFAULT '',synced_member_id INTEGER,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),effective_at TEXT NOT NULL DEFAULT '');
+CREATE INDEX idx_organization_changes_status ON organization_change_requests(status,updated_at);
+CREATE TABLE organization_change_events (id SERIAL PRIMARY KEY,entity_type TEXT NOT NULL,entity_id TEXT NOT NULL,action TEXT NOT NULL,from_status TEXT NOT NULL,to_status TEXT NOT NULL,actor_name TEXT NOT NULL,note TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX idx_organization_change_events_entity ON organization_change_events(entity_type,entity_id,id);
+CREATE TABLE organization_assessment_cycles (id TEXT PRIMARY KEY,name TEXT NOT NULL,type TEXT NOT NULL DEFAULT '',status TEXT NOT NULL,start_date TEXT NOT NULL DEFAULT '',end_date TEXT NOT NULL DEFAULT '',scope TEXT NOT NULL DEFAULT '',instructions TEXT NOT NULL DEFAULT '',owner_name TEXT NOT NULL DEFAULT '',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE organization_assessment_records (id SERIAL PRIMARY KEY,cycle_id TEXT NOT NULL,member_id INTEGER NOT NULL,member_name TEXT NOT NULL,score DOUBLE PRECISION NOT NULL DEFAULT 0,grade TEXT NOT NULL DEFAULT '',comment TEXT NOT NULL DEFAULT '',improvement TEXT NOT NULL DEFAULT '',entered_by TEXT NOT NULL DEFAULT '',updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(cycle_id,member_id));
+CREATE UNIQUE INDEX idx_organization_assessment_record_unique ON organization_assessment_records(cycle_id,member_id);
+CREATE TABLE organization_affairs (id TEXT PRIMARY KEY,category TEXT NOT NULL DEFAULT '',title TEXT NOT NULL,status TEXT NOT NULL,owner_name TEXT NOT NULL DEFAULT '',participant_names TEXT NOT NULL DEFAULT '',deadline TEXT NOT NULL DEFAULT '',external_platform TEXT NOT NULL DEFAULT '',external_reference TEXT NOT NULL DEFAULT '',materials TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',attachments_json TEXT NOT NULL DEFAULT '[]',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),archived_at TEXT NOT NULL DEFAULT '');
+CREATE INDEX idx_organization_affairs_status ON organization_affairs(status,deadline);

@@ -89,15 +89,17 @@ export type ActivityRecord = {
   description: string;
   nextMilestone: string;
   milestones: { date: string; title: string; owner: string; done?: boolean }[];
+  needsVenue: boolean;
+  venueRequest: { purposeCategory: string; usageDate: string; startTime: string; endTime: string; attendeeCount: number; roomTypes: string[]; equipment: string[]; preferredLocation: string; notes: string };
 };
 
 const legacyActivityCatalog = [
-  { id: "top-singer", name: currentActivity.name, category: "文体活动", state: "筹备中", date: "2026年9月25日", day: "25", month: "9月", time: "18:30–21:30", location: currentActivity.location, organizer: "文艺部", teacher: currentActivity.liaisonTeacher, progress: 67, pending: 5, departments: ["文艺部", "运维部", "新媒体中心", "心理部", "办公室", "生活部"], description: "面向全院学生举办的校园歌手赛事，统一协调舞台、宣传、现场服务与赛后报道。", nextMilestone: "9月23日 19:00 舞台联排", milestones: [{ date: "9月19日", title: "预热推文发布", owner: "新媒体中心", done: true }, { date: "9月20日", title: "横幅定稿与下单", owner: "运维部" }, { date: "9月23日", title: "舞台联排", owner: "文艺部、运维部" }, { date: "9月25日", title: "正式比赛", owner: "全体协作部门" }] },
+  { id: "top-singer", name: currentActivity.name, category: "文体活动", state: "筹备中", date: "2026年9月25日", day: "25", month: "9月", time: "18:30–21:30", location: currentActivity.location, organizer: "文艺部", teacher: currentActivity.liaisonTeacher, progress: 67, pending: 5, departments: ["文艺部", "科创中心", "新媒体中心", "心理部", "办公室", "生活部"], description: "面向全院学生举办的校园歌手赛事，统一协调舞台、宣传、现场服务与赛后报道。", nextMilestone: "9月23日 19:00 舞台联排", milestones: [{ date: "9月19日", title: "预热推文发布", owner: "新媒体中心", done: true }, { date: "9月20日", title: "横幅定稿与下单", owner: "科创中心" }, { date: "9月23日", title: "舞台联排", owner: "文艺部、科创中心" }, { date: "9月25日", title: "正式比赛", owner: "全体协作部门" }] },
   { id: "photo-exhibition", name: "学院新闻摄影展", category: "品牌宣传", state: "策划中", date: "2026年10月8日", day: "08", month: "10月", time: "全天", location: "计算机楼一楼展厅", organizer: "新媒体中心", teacher: "李静", progress: 35, pending: 7, departments: ["新媒体中心", "办公室", "实践部"], description: "征集并展出学院年度新闻摄影作品，完成作品评审、展陈设计与线上专题推送。", nextMilestone: "9月28日 作品征集截止", milestones: [{ date: "9月18日", title: "发布征集通知", owner: "新媒体中心", done: true }, { date: "9月28日", title: "作品征集截止", owner: "新媒体中心" }, { date: "10月3日", title: "完成评审与排版", owner: "评审组" }, { date: "10月8日", title: "开展与专题发布", owner: "新媒体中心" }] },
   { id: "operation-contest", name: "重大赛事运营策划大赛", category: "创新实践", state: "策划中", date: "2026年10月16日", day: "16", month: "10月", time: "14:00–18:00", location: "计算机楼学术报告厅", organizer: "新媒体中心", teacher: "赵峰", progress: 22, pending: 9, departments: ["新媒体中心", "实践部", "职规部"], description: "以真实赛事为背景开展运营方案设计、路演展示和专家评审。", nextMilestone: "9月26日 完成赛制与评分标准", milestones: [{ date: "9月20日", title: "立项与需求访谈", owner: "新媒体中心", done: true }, { date: "9月26日", title: "赛制与评分标准定稿", owner: "策划组" }, { date: "10月10日", title: "参赛方案收集", owner: "实践部" }, { date: "10月16日", title: "路演评审", owner: "执行组" }] },
-  { id: "coding-contest", name: "新生程序设计竞赛", category: "科技竞赛", state: "待启动", date: "2026年10月12日", day: "12", month: "10月", time: "14:00–17:00", location: "计算机实验中心", organizer: "科创中心", teacher: "刘倩", progress: 18, pending: 6, departments: ["PC部", "运维部", "学习部", "新媒体中心"], description: "面向新生的程序设计入门竞赛，覆盖命题、报名、机房环境、监考与成绩发布。", nextMilestone: "9月30日 完成机房环境测试", milestones: [{ date: "9月22日", title: "竞赛通知定稿", owner: "PC部", done: true }, { date: "9月30日", title: "机房环境测试", owner: "运维部" }, { date: "10月8日", title: "报名与考场编排", owner: "PC部" }, { date: "10月12日", title: "正式比赛", owner: "科创中心" }] },
+  { id: "coding-contest", name: "新生程序设计竞赛", category: "科技竞赛", state: "待启动", date: "2026年10月12日", day: "12", month: "10月", time: "14:00–17:00", location: "计算机实验中心", organizer: "科创中心", teacher: "刘倩", progress: 18, pending: 6, departments: ["科创中心", "学习部", "新媒体中心"], description: "面向新生的程序设计入门竞赛，覆盖命题、报名、机房环境、监考与成绩发布。", nextMilestone: "9月30日 完成机房环境测试", milestones: [{ date: "9月22日", title: "竞赛通知定稿", owner: "科创中心", done: true }, { date: "9月30日", title: "机房环境测试", owner: "科创中心" }, { date: "10月8日", title: "报名与考场编排", owner: "科创中心" }, { date: "10月12日", title: "正式比赛", owner: "科创中心" }] },
   { id: "career-sharing", name: "秋季校园招聘经验分享会", category: "职业发展", state: "待启动", date: "2026年10月20日", day: "20", month: "10月", time: "19:00–21:00", location: "计算机楼216", organizer: "职规部", teacher: "孙琳", progress: 8, pending: 4, departments: ["职规部", "新媒体中心", "办公室"], description: "邀请高年级同学分享秋招准备、简历优化和面试经验。", nextMilestone: "10月5日 确认分享嘉宾", milestones: [{ date: "10月5日", title: "确认分享嘉宾", owner: "职规部" }, { date: "10月10日", title: "发布报名推送", owner: "新媒体中心" }, { date: "10月18日", title: "场地与材料确认", owner: "办公室" }, { date: "10月20日", title: "现场分享", owner: "职规部" }] },
-  { id: "welcome-night", name: "计算学院迎新晚会", category: "文体活动", state: "已结束", date: "2026年9月6日", day: "06", month: "9月", time: "19:00–21:30", location: "大学生活动中心", organizer: "文艺部", teacher: "王明远", progress: 100, pending: 0, departments: ["文艺部", "新媒体中心", "运维部", "生活部"], description: "面向新生的学院迎新晚会，活动执行已完成，当前进入资料归档与复盘阶段。", nextMilestone: "已完成，待复盘归档", milestones: [{ date: "9月2日", title: "节目联排", owner: "文艺部", done: true }, { date: "9月5日", title: "设备与场地验收", owner: "运维部", done: true }, { date: "9月6日", title: "正式演出", owner: "全体协作部门", done: true }, { date: "9月8日", title: "新闻稿与素材归档", owner: "新媒体中心", done: true }] },
+  { id: "welcome-night", name: "计算学院迎新晚会", category: "文体活动", state: "已结束", date: "2026年9月6日", day: "06", month: "9月", time: "19:00–21:30", location: "大学生活动中心", organizer: "文艺部", teacher: "王明远", progress: 100, pending: 0, departments: ["文艺部", "新媒体中心", "科创中心", "生活部"], description: "面向新生的学院迎新晚会，活动执行已完成，当前进入资料归档与复盘阶段。", nextMilestone: "已完成，待复盘归档", milestones: [{ date: "9月2日", title: "节目联排", owner: "文艺部", done: true }, { date: "9月5日", title: "设备与场地验收", owner: "科创中心", done: true }, { date: "9月6日", title: "正式演出", owner: "全体协作部门", done: true }, { date: "9月8日", title: "新闻稿与素材归档", owner: "新媒体中心", done: true }] },
 ] as const;
 
 export const activityCatalog: ActivityRecord[] = legacyActivityCatalog.map((activity) => ({
@@ -105,6 +107,8 @@ export const activityCatalog: ActivityRecord[] = legacyActivityCatalog.map((acti
   state: normalizeActivityStage(activity.state) ?? "草稿",
   departments: [...activity.departments],
   milestones: activity.milestones.map((milestone) => ({ ...milestone })),
+  needsVenue: false,
+  venueRequest: { purposeCategory: "学生组织活动", usageDate: "", startTime: "", endTime: "", attendeeCount: 0, roomTypes: [], equipment: [], preferredLocation: "", notes: "" },
 }));
 
 export const taskTypes = [
@@ -155,11 +159,11 @@ export const emptyDraft: TaskDraft = {
   kind: "物资制作",
   title: "",
   description: "",
-  department: "运维部",
+  department: "科创中心",
   person: "待指派",
   deadline: "2026-09-24T18:00",
   priority: "普通",
-  reviewer: "运维部负责人",
+  reviewer: "科创中心负责人",
   acceptance: true,
   controlMode: "凭据留痕",
   dynamic: {},
@@ -174,7 +178,7 @@ export const initialTasks: Task[] = [
   {
     id: 1,
     title: "定制活动主题横幅",
-    department: "运维部",
+    department: "科创中心",
     person: "陈雨桐",
     deadline: "9月20日 18:00",
     status: "进行中",
@@ -193,7 +197,7 @@ export const initialTasks: Task[] = [
   {
     id: 2,
     title: "舞台音响设备确认",
-    department: "运维部",
+    department: "科创中心",
     person: "林浩然",
     deadline: "9月21日 12:00",
     status: "待验收",
@@ -209,7 +213,7 @@ export const initialTasks: Task[] = [
   {
     id: 3,
     title: "灯光控制方案与彩排",
-    department: "运维部",
+    department: "科创中心",
     person: "周子轩",
     deadline: "9月23日 21:30",
     status: "进行中",
@@ -319,12 +323,13 @@ export const initialTasks: Task[] = [
 
 export const filters = ["全部任务", "待开始", "进行中", "待验收", "已完成"];
 
-export type ViewKey = "overview" | "activities" | "tasks" | "departmentServices" | "organization" | "archive" | "accounts" | "audit" | "settings";
+export type ViewKey = "overview" | "activities" | "tasks" | "venueRequests" | "departmentServices" | "organization" | "archive" | "accounts" | "audit" | "settings";
 
 export const viewTitles: Record<ViewKey, { parent: string; title: string }> = {
   overview: { parent: "工作台", title: "主席总览" },
   activities: { parent: "业务管理", title: "活动管理" },
   tasks: { parent: "业务管理", title: "任务中心" },
+  venueRequests: { parent: "业务管理", title: "场地申请" },
   departmentServices: { parent: "业务管理", title: "部门办事中心" },
   organization: { parent: "基础数据", title: "组织与成员" },
   archive: { parent: "知识沉淀", title: "资料归档" },
@@ -359,7 +364,7 @@ export function parseMemberImportRows(table: unknown[][], departments: OrgDepart
   const requiredColumns: Array<keyof typeof importHeaders> = ["name", "department", "position"];
   const missingColumns = requiredColumns.filter((key) => column(key) < 0).map((key) => importHeaders[key][0]);
   if (missingColumns.length) throw new Error(`缺少必需列：${missingColumns.join("、")}`);
-  const allowedDepartments = new Set(["主席团", ...departments.filter((department) => department.name !== "科创中心").map((department) => department.name)]);
+  const allowedDepartments = new Set(["主席团", ...departments.map((department) => department.name)]);
   const roleMap: Record<string, MemberImportRow["roleLevel"]> = { "主席": "chair", "负责人": "leader", "干事": "staff", chair: "chair", leader: "leader", staff: "staff" };
   const rows = table.slice(headerRowIndex + 1).map((cells, index) => {
     const value = (key: keyof typeof importHeaders) => column(key) < 0 ? "" : importCell(cells[column(key)]);
@@ -387,8 +392,7 @@ export function parseMemberImportRows(table: unknown[][], departments: OrgDepart
 
 export const blankMember = { id: 0, termId: 0, departmentId: null as number | null, name: "", studentNo: "", className: "", grade: "", major: "", phone: "", position: "干事", roleLevel: "staff" };
 export const fallbackAssignees: Record<string, { name: string; position: string; roleLevel: string }[]> = {
-  运维部: [{ name: "陈雨桐", position: "负责人", roleLevel: "leader" }, { name: "周子轩", position: "干事", roleLevel: "staff" }],
-  PC部: [{ name: "林浩然", position: "负责人", roleLevel: "leader" }],
+  科创中心: [{ name: "陈雨桐", position: "负责人", roleLevel: "leader" }, { name: "林浩然", position: "负责人", roleLevel: "leader" }, { name: "周子轩", position: "干事", roleLevel: "staff" }],
   心理部: [{ name: "赵可欣", position: "负责人", roleLevel: "leader" }],
   文艺部: [{ name: "宋佳宁", position: "负责人", roleLevel: "leader" }],
   新媒体中心: [{ name: "许言", position: "负责人", roleLevel: "leader" }, { name: "苏禾", position: "干事", roleLevel: "staff" }],
@@ -396,7 +400,7 @@ export const fallbackAssignees: Record<string, { name: string; position: string;
 };
 
 export type UserRole = "admin" | "chair" | "leader" | "staff" | "teacher";
-export type NotificationEntity = { type: "task" | "subtask" | "activity" | "officeRequest" | "purchase" | "lostFound" | "account" | "archive" | "system"; id?: string | number; parentTaskId?: number };
+export type NotificationEntity = { type: "task" | "subtask" | "activity" | "officeRequest" | "venueRequest" | "meetingRound" | "meetingReport" | "purchase" | "lostFound" | "account" | "archive" | "system"; id?: string | number; parentTaskId?: number };
 export type NotificationRecord = {
   id: string;
   recipientUsernames: string[];
@@ -412,20 +416,20 @@ export type DemoUser = { id?: number; email?: string; username: string; password
 export const demoUsers: DemoUser[] = [
   { username: "admin", password: "123456", role: "admin", name: "系统管理员", title: "系统管理员 · 平台运维", department: "系统管理" },
   { username: "chair", password: "123456", role: "chair", name: "徐介翰", title: "主席 · 全局统筹", department: "主席团" },
-  { username: "leader", password: "123456", role: "leader", name: "陈雨桐", title: "运维部负责人", department: "运维部" },
-  { username: "staff", password: "123456", role: "staff", name: "周子轩", title: "运维部干事", department: "运维部" },
+  { username: "leader", password: "123456", role: "leader", name: "陈雨桐", title: "科创中心负责人", department: "科创中心" },
+  { username: "staff", password: "123456", role: "staff", name: "周子轩", title: "科创中心干事", department: "科创中心" },
   { username: "teacher", password: "123456", role: "teacher", name: "王明远", title: "指导教师 · 业务指导", department: "计算学院" },
 ];
 export const roleProfiles: Record<UserRole, { name: string; title: string; initial: string }> = {
   admin: { name: "系统管理员", title: "平台运维与权限管理", initial: "管" },
   chair: { name: "徐介翰", title: "主席 · 全局统筹", initial: "徐" },
-  leader: { name: "陈雨桐", title: "运维部负责人", initial: "陈" },
-  staff: { name: "周子轩", title: "运维部干事", initial: "周" },
+  leader: { name: "陈雨桐", title: "科创中心负责人", initial: "陈" },
+  staff: { name: "周子轩", title: "科创中心干事", initial: "周" },
   teacher: { name: "王明远", title: "指导教师 · 业务指导", initial: "王" },
 };
 
 export const seedNotificationRecords: NotificationRecord[] = [
-  { id: "seed-chair-review-2", recipientUsernames: ["chair"], title: "部门结办等待审核", detail: "运维部已提交“舞台音响设备确认”，请审核结果与凭据。", createdAt: "2026-08-16T09:45:00+08:00", level: "warning", entity: { type: "task", id: 2 } },
+  { id: "seed-chair-review-2", recipientUsernames: ["chair"], title: "部门结办等待审核", detail: "科创中心已提交“舞台音响设备确认”，请审核结果与凭据。", createdAt: "2026-08-16T09:45:00+08:00", level: "warning", entity: { type: "task", id: 2 } },
   { id: "seed-leader-risk-1", recipientUsernames: ["leader"], title: "主任务需要关注", detail: "“定制活动主题横幅”的经费审批尚未确认。", createdAt: "2026-08-16T09:20:00+08:00", level: "warning", entity: { type: "task", id: 1 } },
   { id: "seed-staff-assignment", recipientUsernames: ["staff"], title: "执行任务进行中", detail: "“核对灯光控台接口”已分派给你，请按要求提交凭据。", createdAt: "2026-08-16T09:10:00+08:00", level: "info", entity: { type: "subtask", id: "seed-light-console", parentTaskId: 3 } },
   { id: "seed-teacher-guidance", recipientUsernames: ["teacher"], title: "活动方案等待指导", detail: "计算学院十佳歌手比赛执行方案等待指导意见。", createdAt: "2026-08-16T08:50:00+08:00", level: "warning", entity: { type: "activity", id: "top-singer" } },
@@ -444,12 +448,12 @@ export type ArchiveRecord = { id: string; academicYear: string; semester: Academ
 export const archiveRecords: ArchiveRecord[] = [
   { id: "a1", academicYear: "2026-2027学年", semester: "上学期", activity: "计算学院迎新晚会", category: "复盘记录", name: "迎新晚会执行复盘与改进清单", owner: "文艺部", time: "2026-09-08 16:40", size: "1.2 MB" },
   { id: "a2", academicYear: "2026-2027学年", semester: "上学期", activity: "十佳歌手比赛", category: "活动方案", name: "十佳歌手比赛执行方案 V3", owner: "文艺部", time: "2026-09-20 10:24", size: "3.8 MB" },
-  { id: "a3", academicYear: "2026-2027学年", semester: "上学期", activity: "十佳歌手比赛", category: "设备资料", name: "舞台设备与备件清单", owner: "运维部", time: "2026-09-19 21:18", size: "860 KB" },
-  { id: "a4", academicYear: "2026-2027学年", semester: "上学期", activity: "十佳歌手比赛", category: "采购凭证", name: "横幅供应商报价单", owner: "运维部", time: "2026-09-19 18:06", size: "2.1 MB" },
+  { id: "a3", academicYear: "2026-2027学年", semester: "上学期", activity: "十佳歌手比赛", category: "设备资料", name: "舞台设备与备件清单", owner: "科创中心", time: "2026-09-19 21:18", size: "860 KB" },
+  { id: "a4", academicYear: "2026-2027学年", semester: "上学期", activity: "十佳歌手比赛", category: "采购凭证", name: "横幅供应商报价单", owner: "科创中心", time: "2026-09-19 18:06", size: "2.1 MB" },
   { id: "a5", academicYear: "2026-2027学年", semester: "上学期", activity: "学院新闻摄影展", category: "宣传素材", name: "摄影展作品征集推文定稿", owner: "新媒体中心", time: "2026-09-18 20:30", size: "5.4 MB" },
   { id: "a6", academicYear: "2025-2026学年", semester: "下学期", activity: "毕业生晚会", category: "现场素材", name: "毕业生晚会现场精选照片", owner: "新媒体中心", time: "2026-06-16 11:20", size: "268 MB" },
-  { id: "a7", academicYear: "2025-2026学年", semester: "下学期", activity: "程序设计竞赛", category: "活动方案", name: "竞赛组织方案与机房安排", owner: "PC部", time: "2026-04-12 09:15", size: "2.7 MB" },
-  { id: "a8", academicYear: "2025-2026学年", semester: "上学期", activity: "迎新晚会", category: "设备资料", name: "音响灯光接线图与参数", owner: "运维部", time: "2025-09-10 22:05", size: "6.3 MB" },
+  { id: "a7", academicYear: "2025-2026学年", semester: "下学期", activity: "程序设计竞赛", category: "活动方案", name: "竞赛组织方案与机房安排", owner: "科创中心", time: "2026-04-12 09:15", size: "2.7 MB" },
+  { id: "a8", academicYear: "2025-2026学年", semester: "上学期", activity: "迎新晚会", category: "设备资料", name: "音响灯光接线图与参数", owner: "科创中心", time: "2025-09-10 22:05", size: "6.3 MB" },
   { id: "a9", academicYear: "2024-2025学年", semester: "下学期", activity: "十佳歌手比赛", category: "复盘记录", name: "十佳歌手赛后复盘纪要", owner: "主席团", time: "2025-05-28 14:10", size: "740 KB" },
 ];
 

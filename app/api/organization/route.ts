@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       const existingTerm = await db.prepare("SELECT id FROM terms WHERE name = ?").bind(name).all<{ id: number }>();
       if (existingTerm.results.length) return Response.json({ error: `届次“${name}”已经存在，请更换届次名称` }, { status: 409 });
       const departmentRows = (await db.prepare("SELECT * FROM departments").all<DepartmentRow>()).results;
-      const departmentLookup = new Map(departmentRows.filter((department) => department.name !== "科创中心").map((department) => [department.name, department.id]));
+      const departmentLookup = new Map(departmentRows.map((department) => [department.name, department.id]));
       const roleLookup: Record<string, "chair" | "leader" | "staff"> = { "主席": "chair", "负责人": "leader", "干事": "staff", chair: "chair", leader: "leader", staff: "staff" };
       const studentNumbers = new Set<string>();
       const values: Array<{ departmentId: number | null; name: string; studentNo: string; className: string; phone: string; position: string; roleLevel: string; sortOrder: number }> = [];

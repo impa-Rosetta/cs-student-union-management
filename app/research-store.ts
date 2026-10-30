@@ -15,7 +15,7 @@ export interface ResearchItemRecord {
 
 const SEED_RESEARCH: ResearchItemRecord[] = [
   { id: "venue", name: "场地申请与审批", requester: "办公室", status: "待调研", detail: "梳理场地借用、时间冲突和审批记录。" },
-  { id: "expense", name: "经费报销与凭证", requester: "运维部", status: "待调研", detail: "记录预算、票据和报销进度。" },
+  { id: "expense", name: "经费报销与凭证", requester: "科创中心", status: "待调研", detail: "记录预算、票据和报销进度。" },
   { id: "duty", name: "值班与排班管理", requester: "主席团", status: "评估中", detail: "按活动安排值班人员和签到。" },
   { id: "signup", name: "活动报名与签到", requester: "实践部", status: "评估中", detail: "统一报名名单和现场签到。" },
 ];

@@ -26,6 +26,8 @@ interface ActivityRow {
   description: string;
   next_milestone: string;
   milestones_json: string;
+  needs_venue: number;
+  venue_request_json: string;
 }
 
 function safeParse<T>(json: string, fallback: T): T {
@@ -56,10 +58,15 @@ export async function ensureActivitySchema() {
       description TEXT NOT NULL DEFAULT '',
       next_milestone TEXT NOT NULL DEFAULT '',
       milestones_json TEXT NOT NULL DEFAULT '[]',
+      needs_venue INTEGER NOT NULL DEFAULT 0,
+      venue_request_json TEXT NOT NULL DEFAULT '{}',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
   ]);
+  const columns = await db.prepare("PRAGMA table_info(activities)").all<{ name: string }>();
+  if (!columns.results.some((column) => column.name === "needs_venue")) await db.prepare("ALTER TABLE activities ADD COLUMN needs_venue INTEGER NOT NULL DEFAULT 0").run();
+  if (!columns.results.some((column) => column.name === "venue_request_json")) await db.prepare("ALTER TABLE activities ADD COLUMN venue_request_json TEXT NOT NULL DEFAULT '{}'").run();
 }
 
 function rowToActivity(row: ActivityRow): ActivityEntity {
@@ -81,6 +88,8 @@ function rowToActivity(row: ActivityRow): ActivityEntity {
     description: row.description,
     nextMilestone: row.next_milestone,
     milestones: safeParse(row.milestones_json, []),
+    needsVenue: Boolean(row.needs_venue),
+    venueRequest: safeParse(row.venue_request_json, { purposeCategory: "学生组织活动", usageDate: "", startTime: "", endTime: "", attendeeCount: 0, roomTypes: [], equipment: [], preferredLocation: "", notes: "" }),
   };
 }
 
@@ -101,9 +110,9 @@ export async function upsertActivities(activities: ActivityEntity[]): Promise<vo
   if (!activities.length) return;
   await ensureActivitySchema();
   const statements = activities.map((activity) =>
-    db.prepare(`INSERT INTO activities (id, name, category, state, date, day, month, time, location, organizer, teacher, progress, pending, departments_json, description, next_milestone, milestones_json, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET name=excluded.name, category=excluded.category, state=excluded.state, date=excluded.date, day=excluded.day, month=excluded.month, time=excluded.time, location=excluded.location, organizer=excluded.organizer, teacher=excluded.teacher, progress=excluded.progress, pending=excluded.pending, departments_json=excluded.departments_json, description=excluded.description, next_milestone=excluded.next_milestone, milestones_json=excluded.milestones_json, updated_at=CURRENT_TIMESTAMP`)
+    db.prepare(`INSERT INTO activities (id, name, category, state, date, day, month, time, location, organizer, teacher, progress, pending, departments_json, description, next_milestone, milestones_json, needs_venue, venue_request_json, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET name=excluded.name, category=excluded.category, state=excluded.state, date=excluded.date, day=excluded.day, month=excluded.month, time=excluded.time, location=excluded.location, organizer=excluded.organizer, teacher=excluded.teacher, progress=excluded.progress, pending=excluded.pending, departments_json=excluded.departments_json, description=excluded.description, next_milestone=excluded.next_milestone, milestones_json=excluded.milestones_json, needs_venue=excluded.needs_venue, venue_request_json=excluded.venue_request_json, updated_at=CURRENT_TIMESTAMP`)
       .bind(
         activity.id,
         String(activity.name ?? ""),
@@ -122,6 +131,8 @@ export async function upsertActivities(activities: ActivityEntity[]): Promise<vo
         String(activity.description ?? ""),
         String(activity.nextMilestone ?? ""),
         JSON.stringify(activity.milestones ?? []),
+        activity.needsVenue ? 1 : 0,
+        JSON.stringify(activity.venueRequest ?? {}),
       ),
   );
   await db.batch(statements);

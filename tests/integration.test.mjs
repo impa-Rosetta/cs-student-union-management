@@ -40,12 +40,13 @@ let setStorage;
 let organizationRoute;
 let officeRequestsRoute;
 let lifeDepartmentRoute;
+let organizationDepartmentRoute;
 
 const USERS = [
   { email: "admin@demo.local", username: "admin", name: "管理员", role: "admin", department: "系统管理" },
   { email: "chair@demo.local", username: "chair", name: "主席", role: "chair", department: "主席团" },
-  { email: "leader@demo.local", username: "leader", name: "负责人", role: "leader", department: "运维部" },
-  { email: "staff@demo.local", username: "staff", name: "干事", role: "staff", department: "运维部" },
+  { email: "leader@demo.local", username: "leader", name: "负责人", role: "leader", department: "科创中心" },
+  { email: "staff@demo.local", username: "staff", name: "干事", role: "staff", department: "科创中心" },
   { email: "teacher@demo.local", username: "teacher", name: "指导教师", role: "teacher", department: "指导教师" },
 ];
 
@@ -133,6 +134,7 @@ before(async () => {
   organizationRoute = await import("../app/api/organization/route.ts");
   officeRequestsRoute = await import("../app/api/office-requests/route.ts");
   lifeDepartmentRoute = await import("../app/api/life-department/route.ts");
+  organizationDepartmentRoute = await import("../app/api/organization-department/route.ts");
 });
 
 after(() => {
@@ -396,12 +398,12 @@ test("工作流：teacher 执行任务操作被路由层拒绝（403）", async 
 });
 
 test("工作流：非主席发布主任务被拒（403）", async () => {
-  const res = await transitionRoute.POST(requestFor("leader@demo.local", { method: "POST", body: { kind: "task", action: "create", task: { id: 200, title: "越权发布", department: "运维部", person: "干事" } } }));
+  const res = await transitionRoute.POST(requestFor("leader@demo.local", { method: "POST", body: { kind: "task", action: "create", task: { id: 200, title: "越权发布", department: "科创中心", person: "干事" } } }));
   assert.equal(res.status, 403);
 });
 
 test("工作流：主席发布主任务并落库", async () => {
-  const res = await transitionRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { kind: "task", action: "create", task: { id: 100, title: "集成测试主任务", department: "运维部", person: "干事", deadline: "2026-09-20" } } }));
+  const res = await transitionRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { kind: "task", action: "create", task: { id: 100, title: "集成测试主任务", department: "科创中心", person: "干事", deadline: "2026-09-20" } } }));
   assert.equal(res.status, 200);
   const tasks = await taskStore.listAllTasks();
   const task = tasks.find((item) => item.id === 100);
@@ -438,10 +440,10 @@ test("工作流：干事不能拆分子任务（403）", async () => {
 
 test("工作流：负责人拆分子任务→干事执行→负责人验收，父子状态聚合", async () => {
   // 主席新建一个待开始主任务作为子任务父任务
-  let res = await transitionRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { kind: "task", action: "create", task: { id: 101, title: "子任务父任务", department: "运维部", person: "干事" } } }));
+  let res = await transitionRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { kind: "task", action: "create", task: { id: 101, title: "子任务父任务", department: "科创中心", person: "干事" } } }));
   assert.equal(res.status, 200);
 
-  // 负责人（运维部）拆解并分派给干事
+  // 负责人（科创中心）拆解并分派给干事
   res = await transitionRoute.POST(requestFor("leader@demo.local", { method: "POST", body: { kind: "subtask", action: "create", parentTaskId: 101, title: "集成测试子任务", assignee: "干事" } }));
   assert.equal(res.status, 200);
   const created = (await taskStore.listAllSubtasks()).find((item) => item.parentTaskId === 101 && item.title === "集成测试子任务");
@@ -482,7 +484,7 @@ test("API：accounts GET 五类账号均可读", async () => {
 });
 
 test("API：accounts POST 仅 admin 可创建，其余 403", async () => {
-  const account = { email: "newstaff@demo.local", username: "newstaff", name: "新干事", role: "staff", department: "运维部", password: "123456" };
+  const account = { email: "newstaff@demo.local", username: "newstaff", name: "新干事", role: "staff", department: "科创中心", password: "123456" };
   const adminRes = await accountsRoute.POST(requestFor("admin@demo.local", { method: "POST", body: account }));
   assert.equal(adminRes.status, 201);
   for (const role of ["chair", "leader", "staff", "teacher"]) {
@@ -514,7 +516,7 @@ function sessionRequest(path, token, { method = "GET", body } = {}) {
 
 test("认证：密码登录建立会话，会话读取与登出闭环", async () => {
   // 管理员预建带密码的账号
-  const createRes = await accountsRoute.POST(requestFor("admin@demo.local", { method: "POST", body: { email: "loginuser@demo.local", username: "loginuser", name: "登录用户", role: "staff", department: "运维部", password: "secret123" } }));
+  const createRes = await accountsRoute.POST(requestFor("admin@demo.local", { method: "POST", body: { email: "loginuser@demo.local", username: "loginuser", name: "登录用户", role: "staff", department: "科创中心", password: "secret123" } }));
   assert.equal(createRes.status, 201);
 
   // 正确密码登录
@@ -549,7 +551,7 @@ test("认证：密码登录建立会话，会话读取与登出闭环", async ()
 });
 
 test("认证：停用账号无法登录（403）", async () => {
-  await accountsRoute.POST(requestFor("admin@demo.local", { method: "POST", body: { email: "disabled@demo.local", username: "disabled", name: "停用账号", role: "staff", department: "运维部", password: "secret123", active: false } }));
+  await accountsRoute.POST(requestFor("admin@demo.local", { method: "POST", body: { email: "disabled@demo.local", username: "disabled", name: "停用账号", role: "staff", department: "科创中心", password: "secret123", active: false } }));
   const res = await loginRoute.POST(sessionRequest("/api/login", null, { method: "POST", body: { email: "disabled@demo.local", password: "secret123" } }));
   assert.equal(res.status, 403);
 });
@@ -557,7 +559,7 @@ test("认证：停用账号无法登录（403）", async () => {
 // ── 业务数据端点 + 对象存储端口 + 通知回执 ─────────────────
 
 test("API：activities POST 仅 admin/chair，其余 403", async () => {
-  const activity = { id: "act-1", name: "集成测试活动", category: "综合活动", state: "策划中", date: "", day: "", month: "", time: "", location: "", organizer: "主席团", teacher: "", progress: 0, pending: 0, departments: ["运维部"], description: "", nextMilestone: "", milestones: [] };
+  const activity = { id: "act-1", name: "集成测试活动", category: "综合活动", state: "策划中", date: "", day: "", month: "", time: "", location: "", organizer: "主席团", teacher: "", progress: 0, pending: 0, departments: ["科创中心"], description: "", nextMilestone: "", milestones: [] };
   for (const role of ["admin", "chair"]) {
     const res = await activitiesRoute.POST(requestFor(`${role}@demo.local`, { method: "POST", body: { activity } }));
     assert.equal(res.status, 200, `${role} 应可创建活动`);
@@ -596,7 +598,7 @@ test("API：活动阶段流转写入审计并通知下一处理人", async () =>
   const id = `activity-audit-${Date.now()}`;
   const create = await activitiesRoute.POST(requestFor("chair@demo.local", {
     method: "POST",
-    body: { activity: { id, name: "审批留痕测试活动", organizer: "运维部", teacher: "指导教师", departments: ["运维部"] } },
+    body: { activity: { id, name: "审批留痕测试活动", organizer: "科创中心", teacher: "指导教师", departments: ["科创中心"] } },
   }));
   assert.equal(create.status, 200);
 
@@ -691,6 +693,27 @@ test("组织：GET 五类账号均可读，返回届次/部门/成员快照", as
   assert.ok(Array.isArray(body.departments) && body.departments.length > 0, "应返回部门");
   assert.ok(Array.isArray(body.members) && body.members.length > 0, "应返回成员");
   assert.ok(body.selectedTermId, "应返回当前届次 id");
+  const technologyDepartments = body.departments.filter((department) => department.name === "科创中心");
+  assert.equal(technologyDepartments.length, 1, "技术类职能应只保留一个科创中心");
+  assert.equal(technologyDepartments[0].parentId, null, "科创中心应是可直接归属成员的正式部门");
+  assert.ok(body.members.some((member) => member.departmentId === technologyDepartments[0].id), "科创中心应直接拥有成员");
+});
+
+test("组织：历史技术部门与成员自动迁入科创中心", async () => {
+  const legacyName = "\u0050\u0043\u90e8";
+  const term = await repo.prepare("SELECT id FROM terms WHERE is_current = 1 LIMIT 1").first();
+  await repo.prepare("INSERT INTO departments (name, group_name, sort_order) VALUES (?, '徐介翰分管', 99)").bind(legacyName).run();
+  const legacy = await repo.prepare("SELECT id FROM departments WHERE name = ? LIMIT 1").bind(legacyName).first();
+  await repo.prepare("INSERT INTO members (term_id, department_id, name, position, role_level) VALUES (?, ?, '迁移测试成员', '干事', 'staff')").bind(term.id, legacy.id).run();
+
+  const response = await organizationRoute.GET(requestFor("chair@demo.local", { path: "/api/organization" }));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  const center = body.departments.find((department) => department.name === "科创中心");
+  const migratedMember = body.members.find((member) => member.name === "迁移测试成员");
+  assert.ok(center && migratedMember);
+  assert.equal(migratedMember.departmentId, center.id);
+  assert.equal(body.departments.some((department) => department.name === legacyName), false);
 });
 
 test("组织：新增成员仅 admin/chair，其余 403", async () => {
@@ -729,4 +752,21 @@ test("组织：createTerm 仅 admin/chair，其余 403", async () => {
     const res = await organizationRoute.POST(requestFor(`${role}@demo.local`, { method: "POST", body: { action: "createTerm", name: `2029-2030届-${role}`, startYear: 2029, endYear: 2030 } }));
     assert.equal(res.status, 403, `${role} 创建届次应被拒绝`);
   }
+});
+
+test("组织部：入部申请经两级确认后同步正式成员档案",async()=>{
+  let res=await organizationDepartmentRoute.POST(requestFor("staff@demo.local",{method:"POST",path:"/api/organization-department",body:{kind:"change",item:{type:"入部",memberName:"组织部测试成员",studentNo:"ORG20261028",phone:"13800000000",targetDepartment:"组织部",targetPosition:"干事",reason:"通过招新考核"}}}));assert.equal(res.status,201);let body=await res.json();const id=body.item.id;
+  res=await organizationDepartmentRoute.PATCH(requestFor("staff@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"change",id,action:"submit"}}));assert.equal(res.status,200);
+  res=await organizationDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"change",id,action:"organizationApprove",note:"材料齐全"}}));assert.equal(res.status,200);
+  res=await organizationDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"change",id,action:"presidiumConfirm",note:"同意入部"}}));assert.equal(res.status,200);body=await res.json();assert.equal(body.item.status,"已生效");assert.ok(body.item.syncedMemberId);
+  const member=await repo.prepare("SELECT m.name,d.name AS department FROM members m LEFT JOIN departments d ON d.id=m.department_id WHERE m.student_no=?").bind("ORG20261028").first();assert.equal(member.name,"组织部测试成员");assert.equal(member.department,"组织部");
+});
+
+test("组织部：考核和外部事务完成闭环",async()=>{
+  let res=await organizationDepartmentRoute.POST(requestFor("chair@demo.local",{method:"POST",path:"/api/organization-department",body:{kind:"assessment",item:{name:"十月考核",type:"月度考核",startDate:"2026-10-01",endDate:"2026-10-31",scope:"全体成员"}}}));assert.equal(res.status,201);let body=await res.json();const cycleId=body.item.id;
+  res=await organizationDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"assessment",id:cycleId,action:"start"}}));assert.equal(res.status,200);
+  const member=await repo.prepare("SELECT id FROM members WHERE status='active' LIMIT 1").first();res=await organizationDepartmentRoute.POST(requestFor("chair@demo.local",{method:"POST",path:"/api/organization-department",body:{kind:"assessmentRecord",item:{cycleId,memberId:member.id,score:92,grade:"优秀",comment:"工作认真"}}}));assert.equal(res.status,200);
+  res=await organizationDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"assessment",id:cycleId,action:"submit"}}));assert.equal(res.status,200);res=await organizationDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"assessment",id:cycleId,action:"confirm"}}));assert.equal(res.status,200);body=await res.json();assert.equal(body.item.status,"已归档");
+  res=await organizationDepartmentRoute.POST(requestFor("chair@demo.local",{method:"POST",path:"/api/organization-department",body:{kind:"affair",item:{category:"推优",title:"秋季推优材料报送",deadline:"2026-11-10",externalPlatform:"校团委平台"}}}));assert.equal(res.status,201);body=await res.json();const affairId=body.item.id;
+  for(const [action,data] of [["start",{}],["submitResult",{result:"已在校团委平台提交",externalReference:"TW-2026-01"}],["confirm",{}],["archive",{}]]){res=await organizationDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"affair",id:affairId,action,data}}));assert.equal(res.status,200,`${action} 应成功`);body=await res.json()}assert.equal(body.item.status,"已归档");
 });

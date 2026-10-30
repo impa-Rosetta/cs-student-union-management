@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import { applySubtaskAction } from "../app/workflow/apply-subtask-action.ts";
 import { resolveNotification } from "../app/workflow/notifications.ts";
 
-const task = { id: 3, title: "灯光控制方案与彩排", department: "运维部", person: "周子轩", status: "待开始" };
+const task = { id: 3, title: "灯光控制方案与彩排", department: "科创中心", person: "周子轩", status: "待开始" };
 const subtask = { id: "sub-1", parentTaskId: 3, title: "核对灯光控台接口", assignee: "周子轩", status: "待开始" };
 
-const staffAssignee = { role: "staff", name: "周子轩", department: "运维部" };
-const otherStaff = { role: "staff", name: "王辰", department: "运维部" };
-const deptLeader = { role: "leader", name: "陈雨桐", department: "运维部" };
-const otherLeader = { role: "leader", name: "林浩然", department: "PC部" };
+const staffAssignee = { role: "staff", name: "周子轩", department: "科创中心" };
+const otherStaff = { role: "staff", name: "王辰", department: "科创中心" };
+const deptLeader = { role: "leader", name: "陈雨桐", department: "科创中心" };
+const otherLeader = { role: "leader", name: "赵可欣", department: "心理部" };
 const chair = { role: "chair", name: "徐介翰", department: "主席团" };
 const teacher = { role: "teacher", name: "王明远", department: "计算学院" };
 const admin = { role: "admin", name: "系统管理员", department: "系统管理" };
@@ -25,7 +25,7 @@ test("start: 干事开始子任务，主任务自动转进行中", () => {
   assert.equal(r.tasks[0].status, "进行中");
   assert.equal(r.notifications.length, 1);
   assert.deepEqual(r.notifications[0].recipientRoles, ["leader"]);
-  assert.equal(r.notifications[0].recipientDepartment, "运维部");
+  assert.equal(r.notifications[0].recipientDepartment, "科创中心");
 });
 
 test("submit: 提交验收并写入完成说明，通知负责人", () => {
@@ -95,13 +95,13 @@ test("越权被拒绝", () => {
 
 test("通知解析：按角色+部门与姓名解析、过滤停用与本人", () => {
   const accounts = [
-    { username: "leader", name: "陈雨桐", role: "leader", department: "运维部", active: true },
-    { username: "staff", name: "周子轩", role: "staff", department: "运维部", active: true },
-    { username: "other-leader", name: "林浩然", role: "leader", department: "PC部", active: true },
-    { username: "inactive", name: "离职人", role: "leader", department: "运维部", active: false },
+    { username: "leader", name: "陈雨桐", role: "leader", department: "科创中心", active: true },
+    { username: "staff", name: "周子轩", role: "staff", department: "科创中心", active: true },
+    { username: "other-leader", name: "赵可欣", role: "leader", department: "心理部", active: true },
+    { username: "inactive", name: "离职人", role: "leader", department: "科创中心", active: false },
   ];
   const byDept = resolveNotification(
-    { recipientRoles: ["leader"], recipientDepartment: "运维部", title: "t", detail: "d", level: "info", entity: { type: "subtask", id: "x" } },
+    { recipientRoles: ["leader"], recipientDepartment: "科创中心", title: "t", detail: "d", level: "info", entity: { type: "subtask", id: "x" } },
     accounts,
     "someone-else",
   );

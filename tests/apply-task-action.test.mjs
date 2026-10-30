@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { applyTaskAction } from "../app/workflow/apply-task-action.ts";
 import { createSubtask } from "../app/workflow/apply-subtask-action.ts";
 
-const task = { id: 1, title: "舞台音响设备确认", department: "运维部", person: "陈雨桐", status: "进行中" };
+const task = { id: 1, title: "舞台音响设备确认", department: "科创中心", person: "陈雨桐", status: "进行中" };
 
-const deptLeader = { role: "leader", name: "陈雨桐", department: "运维部" };
-const otherLeader = { role: "leader", name: "林浩然", department: "PC部" };
+const deptLeader = { role: "leader", name: "陈雨桐", department: "科创中心" };
+const otherLeader = { role: "leader", name: "赵可欣", department: "心理部" };
 const chair = { role: "chair", name: "徐介翰", department: "主席团" };
-const staffAssignee = { role: "staff", name: "周子轩", department: "运维部" };
+const staffAssignee = { role: "staff", name: "周子轩", department: "科创中心" };
 const teacher = { role: "teacher", name: "王明远", department: "计算学院" };
 const admin = { role: "admin", name: "系统管理员", department: "系统管理" };
 

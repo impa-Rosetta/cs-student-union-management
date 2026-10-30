@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { isOfficeManager, officeRequestTransition } from "../app/office-workflow/state-machine.ts";
 
-const applicant = { role: "leader", department: "运维部", username: "leader", requesterUsername: "leader" };
+const applicant = { role: "leader", department: "科创中心", username: "leader", requesterUsername: "leader" };
 const chair = { role: "chair", department: "主席团", username: "chair", requesterUsername: "leader" };
 const office = { role: "staff", department: "办公室", username: "office", requesterUsername: "leader" };
 

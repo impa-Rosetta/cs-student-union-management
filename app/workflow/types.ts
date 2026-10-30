@@ -53,7 +53,7 @@ export interface WorkflowActor {
 }
 
 export interface WorkflowTransitionEvent {
-  entityType: "task" | "subtask" | "activity" | "office_request" | "purchase_request" | "dorm_inspection" | "lost_found";
+  entityType: "task" | "subtask" | "activity" | "office_request" | "venue_request" | "meeting_round" | "meeting_report" | "purchase_request" | "dorm_inspection" | "lost_found" | "organization_change" | "organization_assessment" | "organization_affair";
   entityId: string | number;
   action: string;
   fromStatus: string;

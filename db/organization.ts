@@ -7,10 +7,49 @@ import { getDb } from "../app/db.ts";
 const departments = [
   ["办公室", "蒋祝琪分管"], ["实践部", "蒋祝琪分管"], ["生活部", "蒋祝琪分管"],
   ["党员之家", "张嘉辉分管"], ["组织部", "张嘉辉分管"], ["心理部", "张嘉辉分管"],
-  ["科创中心", "徐介翰分管"], ["PC部", "徐介翰分管"], ["运维部", "徐介翰分管"], ["职规部", "徐介翰分管"],
+  ["科创中心", "徐介翰分管"], ["职规部", "徐介翰分管"],
   ["学习部", "柏开飞分管"], ["体育部", "柏开飞分管"], ["文艺部", "柏开飞分管"],
   ["新媒体中心", "孙亮杰分管"], ["校友部", "孙亮杰分管"],
 ];
+
+// 使用转义形式只为兼容旧数据库；界面、业务和新数据均只使用“科创中心”。
+const legacyTechnicalDepartmentNames = ["\u0050\u0043\u90e8", "\u8fd0\u7ef4\u90e8"];
+
+async function tableExists(name: string) {
+  const db = getDb();
+  const row = await db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1").bind(name).first<{ name: string }>();
+  return Boolean(row);
+}
+
+async function migrateTechnicalDepartments() {
+  const db = getDb();
+  await db.prepare("INSERT OR IGNORE INTO departments (name, group_name, sort_order) VALUES ('科创中心', '徐介翰分管', 7)").run();
+  const center = await db.prepare("SELECT id FROM departments WHERE name = '科创中心' LIMIT 1").first<{ id: number }>();
+  if (!center) return;
+
+  const legacyRows = await db.prepare("SELECT id FROM departments WHERE name IN (?, ?)")
+    .bind(...legacyTechnicalDepartmentNames).all<{ id: number }>();
+  for (const legacy of legacyRows.results) {
+    await db.prepare("UPDATE members SET department_id = ? WHERE department_id = ?").bind(center.id, legacy.id).run();
+  }
+  await db.prepare("DELETE FROM departments WHERE name IN (?, ?)").bind(...legacyTechnicalDepartmentNames).run();
+  await db.prepare("UPDATE departments SET parent_id = NULL WHERE name = '科创中心'").run();
+
+  const textColumns: Array<[string, string]> = [
+    ["app_accounts", "department"], ["app_accounts", "title"], ["app_accounts", "scope"],
+    ["tasks", "department"], ["activities", "organizer"], ["activities", "departments_json"], ["activities", "milestones_json"],
+    ["office_requests", "requester_department"], ["purchase_requests", "requester_department"],
+    ["archive_records", "owner"], ["research_items", "requester"], ["shared_state", "value"],
+    ["workflow_records", "payload_json"], ["notifications", "detail"],
+  ];
+  for (const [table, column] of textColumns) {
+    if (!(await tableExists(table))) continue;
+    for (const legacyName of legacyTechnicalDepartmentNames) {
+      await db.prepare(`UPDATE ${table} SET ${column} = REPLACE(${column}, ?, '科创中心') WHERE ${column} LIKE ?`)
+        .bind(legacyName, `%${legacyName}%`).run();
+    }
+  }
+}
 
 export async function ensureOrganizationSchema() {
   const db = getDb();
@@ -44,7 +83,7 @@ export async function ensureOrganizationSchema() {
     }
   }
 
-  await db.prepare("UPDATE departments SET parent_id = (SELECT id FROM departments WHERE name = '科创中心') WHERE name IN ('PC部', '运维部')").run();
+  await migrateTechnicalDepartments();
   if ((count?.count ?? 0) > 0) return;
 
   const term = await db.prepare("SELECT id FROM terms WHERE is_current = 1 LIMIT 1").first<{ id: number }>();
@@ -53,9 +92,9 @@ export async function ensureOrganizationSchema() {
   const seeds: Array<[string, string, string | null, string, string]> = [
     ["蒋祝琪", "主席", null, "chair", "2023级"], ["张嘉辉", "主席", null, "chair", "2023级"],
     ["徐介翰", "主席", null, "chair", "2023级"], ["柏开飞", "主席", null, "chair", "2023级"], ["孙亮杰", "主席", null, "chair", "2023级"],
-    ["陈雨桐", "负责人", "运维部", "leader", "2024级"], ["林浩然", "负责人", "PC部", "leader", "2024级"],
+    ["陈雨桐", "负责人", "科创中心", "leader", "2024级"], ["林浩然", "负责人", "科创中心", "leader", "2024级"],
     ["赵可欣", "负责人", "心理部", "leader", "2024级"], ["宋佳宁", "负责人", "文艺部", "leader", "2024级"], ["许言", "负责人", "新媒体中心", "leader", "2024级"],
-    ["周子轩", "干事", "运维部", "staff", "2025级"], ["王辰", "干事", "运维部", "staff", "2025级"], ["刘洋", "干事", "PC部", "staff", "2025级"],
+    ["周子轩", "干事", "科创中心", "staff", "2025级"], ["王辰", "干事", "科创中心", "staff", "2025级"], ["刘洋", "干事", "科创中心", "staff", "2025级"],
     ["林悦", "干事", "心理部", "staff", "2025级"], ["郑欣", "干事", "文艺部", "staff", "2025级"],
     ["苏禾", "摄影干事", "新媒体中心", "staff", "2025级"], ["方可", "新闻稿干事", "新媒体中心", "staff", "2025级"], ["顾言", "视频干事", "新媒体中心", "staff", "2025级"],
   ];
