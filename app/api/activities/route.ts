@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const auth = await requireRole(request, ["admin", "chair", "leader", "teacher"]);
+    const auth = await requireRole(request, ["admin", "chair", "leader"]);
     const body = (await request.json()) as { id?: string; action?: ActivityAction; note?: string; reason?: string };
     if (!body.id || !body.action) {
       return Response.json({ error: "活动编号和阶段操作不能为空" }, { status: 400 });
@@ -45,12 +45,11 @@ export async function PATCH(request: Request) {
     const current = normalizeActivityStage(activity.state);
     if (!current) return Response.json({ error: "活动阶段数据无效" }, { status: 409 });
 
-    const departments = Array.isArray(activity.departments) ? activity.departments.map(String) : [];
     const transition = activityTransition(current, body.action, {
       role: auth.user.role,
       isActivityLeader:
         auth.user.role === "leader" &&
-        (String(activity.organizer ?? "") === auth.user.department || departments.includes(auth.user.department)),
+        String(activity.organizer ?? "") === auth.user.department,
       isGuidingTeacher:
         auth.user.role === "teacher" && String(activity.teacher ?? "") === auth.user.name,
     });

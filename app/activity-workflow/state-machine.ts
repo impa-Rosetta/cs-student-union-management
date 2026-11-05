@@ -57,7 +57,7 @@ export function activityTransition(
   const administrator = actor.role === "admin";
   const chair = actor.role === "chair";
   const manager = administrator || chair || (actor.role === "leader" && actor.isActivityLeader);
-  const reviewer = administrator || chair || (actor.role === "teacher" && actor.isGuidingTeacher);
+  const reviewer = administrator || chair;
 
   switch (action) {
     case "submit":
@@ -65,11 +65,11 @@ export function activityTransition(
       if (current !== "草稿") return denied(`活动当前为“${current}”，不能提交审批`);
       return { ok: true, next: "待审批" };
     case "approve":
-      if (!reviewer) return denied("只有主席、管理员或本活动指导教师可以批准活动");
+      if (!reviewer) return denied("只有主席或管理员可以批准活动");
       if (current !== "待审批") return denied(`活动当前为“${current}”，不能批准`);
       return { ok: true, next: "筹备中" };
     case "reject":
-      if (!reviewer) return denied("只有主席、管理员或本活动指导教师可以退回活动");
+      if (!reviewer) return denied("只有主席或管理员可以退回活动");
       if (current !== "待审批") return denied(`活动当前为“${current}”，不能退回`);
       return { ok: true, next: "草稿" };
     case "start":

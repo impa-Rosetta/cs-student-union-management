@@ -13,7 +13,7 @@ const teacher = { role: "teacher", isActivityLeader: false, isGuidingTeacher: tr
 
 test("活动阶段：完整生命周期", () => {
   assert.deepEqual(activityTransition("草稿", "submit", leader), { ok: true, next: "待审批" });
-  assert.deepEqual(activityTransition("待审批", "approve", teacher), { ok: true, next: "筹备中" });
+  assert.deepEqual(activityTransition("待审批", "approve", chair), { ok: true, next: "筹备中" });
   assert.deepEqual(activityTransition("筹备中", "start", leader), { ok: true, next: "执行中" });
   assert.deepEqual(activityTransition("执行中", "finish", leader), { ok: true, next: "总结中" });
   assert.deepEqual(activityTransition("总结中", "submitArchive", leader), { ok: true, next: "待归档" });
@@ -28,6 +28,7 @@ test("活动阶段：退回和重新打开", () => {
 test("活动阶段：越权和非法流转被拒绝", () => {
   assert.equal(activityTransition("草稿", "submit", unrelatedLeader).ok, false);
   assert.equal(activityTransition("待审批", "approve", leader).ok, false);
+  assert.equal(activityTransition("待审批", "approve", teacher).ok, false);
   assert.equal(activityTransition("草稿", "archive", chair).ok, false);
 });
 

@@ -5,7 +5,7 @@ import { getPlatform } from "../../platform.ts";
 
 export async function POST(request: Request) {
   try {
-    await requireRole(request);
+    await requireRole(request, ["admin", "chair", "leader", "staff"]);
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return Response.json({ error: "请选择文件" }, { status: 400 });
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    await requireRole(request, ["admin", "chair", "leader", "staff", "teacher"]);
+    await requireRole(request, ["admin", "chair", "leader", "staff"]);
     const key = new URL(request.url).searchParams.get("key");
     if (!key) return Response.json({ error: "缺少附件标识" }, { status: 400 });
     await getPlatform().storage.delete(key);

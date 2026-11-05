@@ -223,11 +223,13 @@ test("API：task-types POST 仅 admin 可写", async () => {
   }
 });
 
-test("API：workflow-records POST 五类账号均可追加留痕", async () => {
-  for (const user of USERS) {
+test("API：workflow-records POST 业务角色可写，教师只读", async () => {
+  for (const user of USERS.filter((item) => item.role !== "teacher")) {
     const res = await workflowRecordsRoute.POST(requestFor(user.email, { method: "POST", body: { record: { kind: "guidance", opinion: "ok", createdAt: new Date().toISOString() } } }));
     assert.equal(res.status, 200, `${user.role} 应可追加流程留痕`);
   }
+  const teacher = await workflowRecordsRoute.POST(requestFor("teacher@demo.local", { method: "POST", body: { record: { kind: "guidance", opinion: "越权写入" } } }));
+  assert.equal(teacher.status, 403);
 });
 
 test("API：audit GET 仅 admin/chair 可读，其余 403", async () => {
@@ -594,19 +596,21 @@ test("API：accounts POST 仅 admin 可创建，其余 403", async () => {
   }
 });
 
-test("API：notifications POST 已登录可创建，未认证 401", async () => {
+test("API：notifications POST 业务角色可创建，教师只读，未认证 401", async () => {
   const unauthenticated = await notificationsRoute.POST(new Request("https://union.example.com/api/notifications", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ recipientUsernames: ["staff"], title: "x", detail: "y" }) }));
   assert.equal(unauthenticated.status, 401);
-  for (const user of USERS) {
+  for (const user of USERS.filter((item) => item.role !== "teacher")) {
     const res = await notificationsRoute.POST(requestFor(user.email, { method: "POST", body: { recipientUsernames: ["staff"], title: "通知", detail: "内容" } }));
     assert.equal(res.status, 201, `${user.role} 应可创建通知`);
   }
+  const teacher = await notificationsRoute.POST(requestFor("teacher@demo.local", { method: "POST", body: { recipientUsernames: ["staff"], title: "越权通知", detail: "内容" } }));
+  assert.equal(teacher.status, 403);
 });
 
 test("API：共享状态只返回当前账号通知", async () => {
   const staffRes = await stateRoute.GET(requestFor("staff@demo.local", { path: "/api/state" }));
   const staffBody = await staffRes.json();
-  assert.ok(staffBody.state.notifications.length >= USERS.length);
+  assert.ok(staffBody.state.notifications.length >= USERS.length - 1);
   assert.ok(staffBody.state.notifications.every((item) => item.recipientUsernames.includes("staff")));
 
   const learningRes = await stateRoute.GET(requestFor("learning@demo.local", { path: "/api/state" }));
@@ -625,6 +629,29 @@ function sessionRequest(path, token, { method = "GET", body } = {}) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 }
+
+function localSessionRequest(path, token, { method = "GET", body } = {}) {
+  const headers = token ? { Cookie: `session=${token}` } : {};
+  if (body !== undefined) headers["content-type"] = "application/json";
+  return new Request(`http://localhost:3000${path}`, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+}
+
+test("本地开发：无会话不再回退管理员，种子账号可真实登录", async () => {
+  const unauthenticated = await sessionRoute.GET(localSessionRequest("/api/session", null));
+  assert.equal(unauthenticated.status, 401);
+  const stateWithoutSession = await stateRoute.GET(localSessionRequest("/api/state", null));
+  assert.equal(stateWithoutSession.status, 401);
+
+  const login = await loginRoute.POST(localSessionRequest("/api/login", null, { method: "POST", body: { email: "chair@demo.local", password: "123456" } }));
+  assert.equal(login.status, 200);
+  const token = ((login.headers.get("set-cookie") || "").match(/session=([^;]+)/) || [])[1];
+  assert.ok(token);
+  const session = await sessionRoute.GET(localSessionRequest("/api/session", token));
+  assert.equal(session.status, 200);
+  const result = await session.json();
+  assert.equal(result.user.role, "chair");
+  assert.equal(result.user.username, "chair");
+});
 
 test("认证：密码登录建立会话，会话读取与登出闭环", async () => {
   // 管理员预建带密码的账号
@@ -706,6 +733,14 @@ test("API：活动创建固定为草稿，阶段必须通过 PATCH 推进", asyn
   assert.equal((await approve.json()).activity.state, "筹备中");
 });
 
+test("API：参与部门负责人不能代替主办部门推进活动", async () => {
+  const id = `participant-boundary-${Date.now()}`;
+  const created = await activitiesRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { activity: { id, name: "跨部门活动", organizer: "办公室", departments: ["办公室", "科创中心"] } } }));
+  assert.equal(created.status, 200);
+  const participantAttempt = await activitiesRoute.PATCH(requestFor("leader@demo.local", { method: "PATCH", body: { id, action: "submit" } }));
+  assert.equal(participantAttempt.status, 403);
+});
+
 test("API：活动阶段流转写入审计并通知下一处理人", async () => {
   const id = `activity-audit-${Date.now()}`;
   const create = await activitiesRoute.POST(requestFor("chair@demo.local", {
@@ -723,7 +758,13 @@ test("API：活动阶段流转写入审计并通知下一处理人", async () =>
   assert.equal(submitBody.activity.state, "待审批");
   assert.deepEqual(new Set(submitBody.notifications.flatMap((item) => item.recipientUsernames)), new Set(["chair", "teacher"]));
 
-  const approve = await activitiesRoute.PATCH(requestFor("teacher@demo.local", {
+  const teacherAttempt = await activitiesRoute.PATCH(requestFor("teacher@demo.local", {
+    method: "PATCH",
+    body: { id, action: "approve", note: "同意按方案推进" },
+  }));
+  assert.equal(teacherAttempt.status, 403);
+
+  const approve = await activitiesRoute.PATCH(requestFor("chair@demo.local", {
     method: "PATCH",
     body: { id, action: "approve", note: "同意按方案推进" },
   }));
@@ -800,6 +841,17 @@ test("附件：上传→下载→删除闭环（ObjectStorage 端口）", async 
   const downloadRes = await filesRoute.GET(requestFor("chair@demo.local", { path: `/api/files?key=${encodeURIComponent(attachment.key)}` }));
   assert.equal(downloadRes.status, 200);
   assert.match(downloadRes.headers.get("content-disposition") || "", /filename/);
+
+  const teacherForm = new FormData();
+  teacherForm.append("file", new File(["read-only"], "教师不可上传.txt", { type: "text/plain" }));
+  const teacherUpload = await filesRoute.POST(new Request("https://union.example.com/api/files", {
+    method: "POST",
+    headers: { "oai-authenticated-user-email": "teacher@demo.local", "oai-authenticated-user-id": "u-teacher@demo.local" },
+    body: teacherForm,
+  }));
+  assert.equal(teacherUpload.status, 403);
+  const teacherDelete = await filesRoute.DELETE(requestFor("teacher@demo.local", { method: "DELETE", path: `/api/files?key=${encodeURIComponent(attachment.key)}` }));
+  assert.equal(teacherDelete.status, 403);
 
   const delRes = await filesRoute.DELETE(requestFor("chair@demo.local", { method: "DELETE", path: `/api/files?key=${encodeURIComponent(attachment.key)}` }));
   assert.equal(delRes.status, 200);

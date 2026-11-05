@@ -24,7 +24,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireRole(request);
+    const auth = await requireRole(request, ["admin", "chair", "leader", "staff"]);
     const body = await request.json() as Record<string, unknown>;
     if (body.kind === "venue") {
       const venue = await createVenueRequest(body.draft as VenueDraft, auth.user, Boolean(body.submit));
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const auth = await requireRole(request);
+    const auth = await requireRole(request, ["admin", "chair", "leader", "staff"]);
     const body = await request.json() as { kind?: string; id?: string; draft?: VenueDraft };
     if (body.kind !== "venue" || !body.id || !body.draft) return Response.json({ error: "参数不完整" }, { status: 400 });
     const venue = await updateVenueRequest(body.id, body.draft, auth.user);
@@ -64,7 +64,7 @@ export async function PUT(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const auth = await requireRole(request);
+    const auth = await requireRole(request, ["admin", "chair", "leader", "staff"]);
     const body = await request.json() as Record<string, unknown>;
     if (body.kind === "venue" && body.id && body.action) {
       const venue = await actOnVenueRequest(String(body.id), body.action as VenueAction, auth.user, {

@@ -2,6 +2,7 @@ import { getDb } from "./db.ts";
 import { platformIdentityFromHeaders } from "./platform-identity.ts";
 import { getCookie } from "./cookie.ts";
 import { getSessionUser } from "./session-store.ts";
+import { hashPassword } from "./password.ts";
 
 const db = getDb();
 
@@ -78,6 +79,36 @@ function isLocalRequest(request: Request) {
   return hostname === "localhost" || hostname === "127.0.0.1";
 }
 
+const LOCAL_TEST_ACCOUNTS: Array<{ email: string; username: string; name: string; role: AppRole; department: string; title: string; scope: string }> = [
+  { email: "admin@demo.local", username: "admin", name: "系统管理员", role: "admin", department: "系统管理", title: "系统管理员", scope: "系统配置与基础数据" },
+  { email: "chair@demo.local", username: "chair", name: "徐介翰", role: "chair", department: "主席团", title: "主席", scope: "当前届次全部业务" },
+  { email: "leader@demo.local", username: "leader", name: "陈雨桐", role: "leader", department: "科创中心", title: "科创中心负责人", scope: "科创中心及相关任务" },
+  { email: "staff@demo.local", username: "staff", name: "周子轩", role: "staff", department: "科创中心", title: "科创中心干事", scope: "本人任务" },
+  { email: "office@demo.local", username: "office", name: "办公室测试人员", role: "leader", department: "办公室", title: "办公室负责人", scope: "办公室及相关任务" },
+  { email: "learning@demo.local", username: "learning", name: "学习部测试人员", role: "staff", department: "学习部", title: "学习部干事", scope: "本人任务" },
+  { email: "media@demo.local", username: "media", name: "新媒体测试人员", role: "staff", department: "新媒体中心", title: "新媒体干事", scope: "本人任务" },
+  { email: "teacher@demo.local", username: "teacher", name: "王明远", role: "teacher", department: "计算学院", title: "指导教师", scope: "全部业务只读" },
+];
+
+export async function ensureLocalDevelopmentAccounts(request: Request) {
+  if (!isLocalRequest(request)) return;
+  await ensurePlatformSchema();
+  for (const account of LOCAL_TEST_ACCOUNTS) {
+    const existing = await db.prepare("SELECT id, password_hash FROM app_accounts WHERE lower(email) = ? OR username = ? LIMIT 1")
+      .bind(account.email, account.username).first<{ id: number; password_hash: string | null }>();
+    if (existing) {
+      if (!existing.password_hash) {
+        await db.prepare("UPDATE app_accounts SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+          .bind(await hashPassword("123456"), existing.id).run();
+      }
+      continue;
+    }
+    await db.prepare(`INSERT INTO app_accounts (email,username,name,role,department,title,scope,password_hash,active)
+      VALUES (?,?,?,?,?,?,?,?,1)`)
+      .bind(account.email, account.username, account.name, account.role, account.department, account.title, account.scope, await hashPassword("123456")).run();
+  }
+}
+
 function toUser(row: AccountRow): AuthenticatedUser {
   return {
     id: row.id,
@@ -93,10 +124,10 @@ function toUser(row: AccountRow): AuthenticatedUser {
   };
 }
 
-export async function currentUser(request: Request, options: { allowLocal?: boolean } = {}) {
+export async function currentUser(request: Request) {
   await ensurePlatformSchema();
-  // 1) 服务端会话 Cookie（自托管密码登录）。即使在 localhost，也优先使用
-  // 已登录账号，方便按真实角色测试；没有会话时再回退到本地管理员。
+  // 1) 服务端会话 Cookie（自托管密码登录）。localhost 同样必须建立真实会话，
+  // 不再通过本地管理员回退绕过角色边界。
   const sessionToken = getCookie(request, "session");
   if (sessionToken) {
     const sessionUser = await getSessionUser(sessionToken);
@@ -120,24 +151,7 @@ export async function currentUser(request: Request, options: { allowLocal?: bool
     }
   }
 
-  if (isLocalRequest(request) && options.allowLocal !== false) {
-    return {
-      localMode: true,
-      authMethod: "local" as const,
-      user: {
-        id: 0,
-        externalUserId: "local-development",
-        email: "local@localhost",
-        username: "admin",
-        name: "本地开发管理员",
-        role: "admin" as AppRole,
-        department: "系统管理",
-        title: "系统管理员",
-        scope: "全部数据",
-        active: true,
-      },
-    };
-  }
+  if (isLocalRequest(request)) throw new AuthError(401, "请先登录");
 
   // 2) 平台身份头（Cloudflare Sites）。
   const identity = platformIdentityFromHeaders(request.headers);

@@ -3,6 +3,7 @@
 import { getDb } from "../../db.ts";
 import { verifyPassword } from "../../password.ts";
 import { createSession } from "../../session-store.ts";
+import { ensureLocalDevelopmentAccounts } from "../../server-auth.ts";
 
 const db = getDb();
 
@@ -11,6 +12,7 @@ const COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7 天
 
 export async function POST(request: Request) {
   try {
+    await ensureLocalDevelopmentAccounts(request);
     const body = (await request.json()) as { email?: string; password?: string };
     const email = String(body.email || "").trim().toLowerCase();
     const password = String(body.password || "");

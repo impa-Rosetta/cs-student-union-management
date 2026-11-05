@@ -48,7 +48,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const auth = await requireRole(request);
+    const auth = await requireRole(request, ["admin", "chair", "leader", "staff"]);
     if (!isLearningMember(auth.user)) throw new AuthError(403,"仅学习部可以提交白卡附件");
     const body = await request.json() as { attachments?: unknown };
     if (!validAttachments(body.attachments)) return Response.json({error:"请至少上传一个附件"},{status:400});
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const auth = await requireRole(request);
+    const auth = await requireRole(request, ["admin", "chair", "leader", "staff"]);
     const body = await request.json() as { id?:string;action?:WhiteCardAction;note?:string;articleUrl?:string;reviewerUsername?:string;attachments?:unknown };
     if (!body.id || !body.action) return Response.json({error:"缺少白卡记录或操作"},{status:400});
     let item = await getWhiteCard(body.id);

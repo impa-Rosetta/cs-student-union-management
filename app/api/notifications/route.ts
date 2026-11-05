@@ -6,7 +6,7 @@ import type { NotificationRecord } from "../../workflow/notifications.ts";
 
 export async function POST(request: Request) {
   try {
-    await requireRole(request);
+    await requireRole(request, ["admin", "chair", "leader", "staff"]);
     const body = (await request.json()) as {
       recipientUsernames?: string[];
       title?: string;

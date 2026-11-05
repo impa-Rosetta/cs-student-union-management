@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireRole(request);
+    await requireRole(request, ["admin", "chair", "leader", "staff"]);
     const body = (await request.json()) as { record?: Record<string, string> };
     if (!body.record || typeof body.record !== "object") {
       return Response.json({ error: "流程记录不完整" }, { status: 400 });
