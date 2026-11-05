@@ -47,6 +47,8 @@ const EXPECTED = {
   organization_affairs:["id","category","title","status","owner_name","participant_names","deadline","external_platform","external_reference","materials","result","attachments_json","created_at","updated_at","archived_at"],
   white_card_submissions: ["id","title","status","submitter_username","submitter_name","attachments_json","handler_username","handler_name","article_url","reviewer_username","reviewer_name","return_target","return_reason","created_at","updated_at","archived_at"],
   white_card_events: ["id","submission_id","action","from_status","to_status","actor_username","actor_name","note","created_at"],
+  work_items: ["id","source_type","source_id","title","status_group","native_status","activity_id","activity_name","owner_department_name","assignee_account_id","assignee_name","requester_account_id","requester_username","requester_name","priority","planned_start_at","due_at","completed_at","blocked","blocked_reason","next_actor_type","next_actor_id","created_at","updated_at"],
+  work_item_events: ["id","work_item_id","action","from_status","to_status","actor_account_id","actor_name","changes_json","note","created_at"],
   archive_records: ["id", "academic_year", "semester", "activity", "category", "name", "owner", "time", "size", "object_key", "description", "created_at"],
   task_type_schemas: ["name", "note", "icon", "fields_json", "sort_order"],
   system_config: ["id", "attachment_limit", "academic_year_month", "semester_boundary", "notification_days", "backup_time", "updated_by", "updated_at"],

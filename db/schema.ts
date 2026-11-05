@@ -334,3 +334,28 @@ export const whiteCardEvents = sqliteTable("white_card_events", {
   note: text("note").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [index("idx_white_card_events_submission").on(table.submissionId, table.id)]);
+
+export const workItems = sqliteTable("work_items", {
+  id: text("id").primaryKey(), sourceType: text("source_type").notNull(), sourceId: text("source_id").notNull(),
+  title: text("title").notNull(), statusGroup: text("status_group").notNull(), nativeStatus: text("native_status").notNull(),
+  activityId: text("activity_id").notNull().default(""), activityName: text("activity_name").notNull().default(""),
+  ownerDepartmentName: text("owner_department_name").notNull().default(""), assigneeAccountId: integer("assignee_account_id"),
+  assigneeName: text("assignee_name").notNull().default(""), requesterAccountId: integer("requester_account_id"),
+  requesterUsername: text("requester_username").notNull().default(""), requesterName: text("requester_name").notNull().default(""),
+  priority: text("priority").notNull().default("普通"), plannedStartAt: text("planned_start_at").notNull().default(""),
+  dueAt: text("due_at").notNull().default(""), completedAt: text("completed_at").notNull().default(""),
+  blocked: integer("blocked", { mode: "boolean" }).notNull().default(false), blockedReason: text("blocked_reason").notNull().default(""),
+  nextActorType: text("next_actor_type").notNull().default(""), nextActorId: text("next_actor_id").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("idx_work_items_source").on(table.sourceType, table.sourceId), index("idx_work_items_activity").on(table.activityId),
+  index("idx_work_items_department").on(table.ownerDepartmentName, table.statusGroup), index("idx_work_items_assignee").on(table.assigneeAccountId, table.statusGroup),
+  index("idx_work_items_requester").on(table.requesterUsername, table.statusGroup),
+]);
+
+export const workItemEvents = sqliteTable("work_item_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }), workItemId: text("work_item_id").notNull(), action: text("action").notNull(),
+  fromStatus: text("from_status").notNull().default(""), toStatus: text("to_status").notNull().default(""), actorAccountId: integer("actor_account_id"),
+  actorName: text("actor_name").notNull().default(""), changesJson: text("changes_json").notNull().default("{}"), note: text("note").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_work_item_events_item").on(table.workItemId, table.id)]);

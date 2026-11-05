@@ -334,9 +334,10 @@ export const initialTasks: Task[] = [
 
 export const filters = ["全部任务", "待开始", "进行中", "待验收", "已完成"];
 
-export type ViewKey = "overview" | "activities" | "tasks" | "venueRequests" | "departmentServices" | "organization" | "archive" | "accounts" | "audit" | "settings";
+export type ViewKey = "overview" | "workItems" | "activities" | "tasks" | "venueRequests" | "departmentServices" | "organization" | "archive" | "accounts" | "audit" | "settings";
 
 export const viewTitles: Record<ViewKey, { parent: string; title: string }> = {
+  workItems: { parent: "协作管理", title: "我的工作" },
   overview: { parent: "工作台", title: "主席总览" },
   activities: { parent: "业务管理", title: "活动管理" },
   tasks: { parent: "业务管理", title: "任务中心" },

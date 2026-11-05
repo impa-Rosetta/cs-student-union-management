@@ -367,3 +367,27 @@ CREATE TABLE white_card_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_white_card_events_submission ON white_card_events(submission_id,id);
+
+CREATE TABLE work_items (
+  id TEXT PRIMARY KEY, source_type TEXT NOT NULL, source_id TEXT NOT NULL, title TEXT NOT NULL,
+  status_group TEXT NOT NULL, native_status TEXT NOT NULL, activity_id TEXT NOT NULL DEFAULT '',
+  activity_name TEXT NOT NULL DEFAULT '', owner_department_name TEXT NOT NULL DEFAULT '',
+  assignee_account_id INTEGER, assignee_name TEXT NOT NULL DEFAULT '', requester_account_id INTEGER,
+  requester_username TEXT NOT NULL DEFAULT '', requester_name TEXT NOT NULL DEFAULT '', priority TEXT NOT NULL DEFAULT '普通',
+  planned_start_at TEXT NOT NULL DEFAULT '', due_at TEXT NOT NULL DEFAULT '', completed_at TEXT NOT NULL DEFAULT '',
+  blocked BOOLEAN NOT NULL DEFAULT FALSE, blocked_reason TEXT NOT NULL DEFAULT '', next_actor_type TEXT NOT NULL DEFAULT '',
+  next_actor_id TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(source_type,source_id)
+);
+CREATE UNIQUE INDEX idx_work_items_source ON work_items(source_type,source_id);
+CREATE INDEX idx_work_items_activity ON work_items(activity_id);
+CREATE INDEX idx_work_items_department ON work_items(owner_department_name,status_group);
+CREATE INDEX idx_work_items_assignee ON work_items(assignee_account_id,status_group);
+CREATE INDEX idx_work_items_requester ON work_items(requester_username,status_group);
+
+CREATE TABLE work_item_events (
+  id SERIAL PRIMARY KEY, work_item_id TEXT NOT NULL, action TEXT NOT NULL, from_status TEXT NOT NULL DEFAULT '',
+  to_status TEXT NOT NULL DEFAULT '', actor_account_id INTEGER, actor_name TEXT NOT NULL DEFAULT '',
+  changes_json TEXT NOT NULL DEFAULT '{}', note TEXT NOT NULL DEFAULT '', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_work_item_events_item ON work_item_events(work_item_id,id);

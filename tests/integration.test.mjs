@@ -43,6 +43,7 @@ let lifeDepartmentRoute;
 let organizationDepartmentRoute;
 let learningDepartmentRoute;
 let teacherSupervisionRoute;
+let workItemsRoute;
 
 const USERS = [
   { email: "admin@demo.local", username: "admin", name: "管理员", role: "admin", department: "系统管理" },
@@ -141,6 +142,7 @@ before(async () => {
   organizationDepartmentRoute = await import("../app/api/organization-department/route.ts");
   learningDepartmentRoute = await import("../app/api/learning-department/route.ts");
   teacherSupervisionRoute = await import("../app/api/teacher-supervision/route.ts");
+  workItemsRoute = await import("../app/api/work-items/route.ts");
 });
 
 after(() => {
@@ -848,4 +850,21 @@ test("学习部白卡：模板与权限校验",async()=>{
   res=await learningDepartmentRoute.GET(requestFor("media@demo.local",{path:"/api/learning-department?template=1"}));assert.equal(res.status,403);
   res=await learningDepartmentRoute.POST(requestFor("media@demo.local",{method:"POST",path:"/api/learning-department",body:{attachments:[{key:"x",name:"x"}]}}));assert.equal(res.status,403);
   res=await learningDepartmentRoute.POST(requestFor("learning@demo.local",{method:"POST",path:"/api/learning-department",body:{attachments:[]}}));assert.equal(res.status,400);
+});
+
+test("统一工作项：接入任务、子任务、采购与白卡并按角色裁剪", async () => {
+  const chairResponse = await workItemsRoute.GET(requestFor("chair@demo.local", { path: "/api/work-items" }));
+  assert.equal(chairResponse.status, 200);
+  const chairBody = await chairResponse.json();
+  assert.ok(chairBody.items.some((item) => item.sourceType === "task" && item.sourceId === "100"));
+  assert.ok(chairBody.items.some((item) => item.sourceType === "subtask"));
+  assert.ok(chairBody.items.some((item) => item.sourceType === "purchase_request"));
+  const whiteCard = chairBody.items.find((item) => item.sourceType === "white_card");
+  assert.ok(whiteCard);
+  assert.equal(whiteCard.activityId, "", "白卡必须禁止关联活动");
+
+  const learningResponse = await workItemsRoute.GET(requestFor("learning@demo.local", { path: "/api/work-items" }));
+  const learningBody = await learningResponse.json();
+  assert.ok(learningBody.items.some((item) => item.sourceType === "white_card"));
+  assert.equal(learningBody.items.some((item) => item.sourceType === "task" && item.sourceId === "100"), false);
 });
