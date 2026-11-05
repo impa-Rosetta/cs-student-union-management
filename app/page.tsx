@@ -44,7 +44,7 @@ import {
   type WorkflowActionPayload,
 } from "./product-model";
 
-import { ChairOverview, ConfirmActionModal, LoginScreen, ProductModule, QuickFlowModal, RoleDashboard, TextEntryModal } from "./views";
+import { ChairOverview, ConfirmActionModal, LoginScreen, ProductModule, QuickFlowModal, RoleDashboard, TextEntryModal, WhiteCardDashboardTodo } from "./views";
 
 const TASK_TYPE_ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "package-check": PackageCheck,
@@ -70,6 +70,7 @@ export default function Home() {
   const [notificationRecords, setNotificationRecords] = useState<NotificationRecord[]>(seedNotificationRecords);
   const [uploading, setUploading] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>("overview");
+  const [departmentServiceTarget, setDepartmentServiceTarget] = useState<string | null>(null);
   const [eventWorkspaceOpen, setEventWorkspaceOpen] = useState(false);
   const [filter, setFilter] = useState("全部任务");
   const [query, setQuery] = useState("");
@@ -217,15 +218,15 @@ export default function Home() {
 
   function selectDraftActivity(value: string) {
     if (value === "standalone") {
-      setDraft((current) => ({ ...current, activityName: "非活动临时事项", activityTime: "不适用", activityLocation: "不适用", liaisonTeacher: "" }));
+      setDraft((current) => ({ ...current, activityId: "", activityName: "非活动临时事项", activityTime: "不适用", activityLocation: "不适用", liaisonTeacher: "" }));
       return;
     }
     const activity = activities.find((item) => item.id === value);
     if (!activity) {
-      setDraft((current) => ({ ...current, activityName: "", activityTime: "", activityLocation: "", liaisonTeacher: "" }));
+      setDraft((current) => ({ ...current, activityId: "", activityName: "", activityTime: "", activityLocation: "", liaisonTeacher: "" }));
       return;
     }
-    setDraft((current) => ({ ...current, activityName: activity.name, activityTime: `${activity.date} ${activity.time}`, activityLocation: activity.location, liaisonTeacher: activity.teacher }));
+    setDraft((current) => ({ ...current, activityId: activity.id, activityName: activity.name, activityTime: `${activity.date} ${activity.time}`, activityLocation: activity.location, liaisonTeacher: activity.teacher }));
   }
 
   const progress = Math.round((tasks.filter((task) => task.status === "已完成").length / tasks.length) * 100);
@@ -364,7 +365,7 @@ export default function Home() {
   function openNewTask() {
     const saved = window.localStorage.getItem("union-task-draft-v1");
     if (saved) {
-      try { const restored = JSON.parse(saved); setDraft({ ...emptyDraft, ...restored, activityName: "", activityTime: "", activityLocation: "", liaisonTeacher: "", dynamic: restored.dynamic || {}, attachments: restored.attachments || [] }); } catch { setDraft({ ...emptyDraft, dynamic: {}, attachments: [] }); }
+      try { const restored = JSON.parse(saved); setDraft({ ...emptyDraft, ...restored, activityId: "", activityName: "", activityTime: "", activityLocation: "", liaisonTeacher: "", dynamic: restored.dynamic || {}, attachments: restored.attachments || [] }); } catch { setDraft({ ...emptyDraft, dynamic: {}, attachments: [] }); }
     } else {
       setDraft({ ...emptyDraft, dynamic: {} });
     }
@@ -455,11 +456,14 @@ export default function Home() {
       title: draft.title,
       department: draft.department,
       person: draft.person || "待指派",
-      deadline: draft.deadline ? draft.deadline.slice(5).replace("-", "月").replace("T", "日 ") : "未设置",
+      deadline: draft.plannedEndAt ? draft.plannedEndAt.slice(5).replace("-", "月").replace("T", "日 ") : "未设置",
       status: "待开始",
       kind: draft.kind,
       description: draft.description || "暂无补充说明。",
+      activityId: draft.activityId,
       activityName: draft.activityName,
+      plannedStartAt: draft.plannedStartAt,
+      plannedEndAt: draft.plannedEndAt,
       activityTime: draft.activityTime,
       activityLocation: draft.activityLocation,
       liaisonTeacher: draft.liaisonTeacher,
@@ -487,7 +491,7 @@ export default function Home() {
     if (message.includes("准备新任务")) {
       const activity = activities.find((item) => message.includes(item.name));
       if (activity) {
-        setDraft({ ...emptyDraft, activityName: activity.name, activityTime: `${activity.date} ${activity.time}`, activityLocation: activity.location, liaisonTeacher: activity.teacher, dynamic: {}, attachments: [] });
+        setDraft({ ...emptyDraft, activityId: activity.id, activityName: activity.name, activityTime: `${activity.date} ${activity.time}`, activityLocation: activity.location, liaisonTeacher: activity.teacher, dynamic: {}, attachments: [] });
         setNewStep(1);
         return setShowNew(true);
       }
@@ -529,6 +533,10 @@ export default function Home() {
     }
     if (item.entity?.type === "activity") return setActiveView("activities");
     if (item.entity?.type === "venueRequest") return setActiveView("venueRequests");
+    if (item.entity?.type === "white_card") {
+      setDepartmentServiceTarget(session?.department === "新媒体中心" ? "新媒体中心" : "学习部");
+      return setActiveView("departmentServices");
+    }
     if (["officeRequest", "purchase", "lostFound", "meetingRound", "meetingReport"].includes(item.entity?.type || "")) return setActiveView("departmentServices");
     if (item.entity?.type === "account") {
       if (userRole === "admin") return setActiveView("accounts");
@@ -544,6 +552,12 @@ export default function Home() {
     }
     setNotice(`已查看：${item.title}`);
     window.setTimeout(() => setNotice(""), 2400);
+  }
+
+  function openWhiteCards() {
+    setDepartmentServiceTarget(session?.department === "新媒体中心" ? "新媒体中心" : "学习部");
+    setEventWorkspaceOpen(false);
+    setActiveView("departmentServices");
   }
 
   async function submitQuickFlow(data: Record<string,string>) {
@@ -631,7 +645,7 @@ export default function Home() {
           {userRole !== "admin" && <button className={`nav-item ${activeView === "activities" || eventWorkspaceOpen ? "active" : ""}`} title="活动管理" onClick={() => { setActiveView("activities"); setEventWorkspaceOpen(false); }}><Activity size={18} />活动管理<span className="nav-count">{activities.length}</span></button>}
           {userRole === "chair" && <button className={`nav-item ${activeView === "tasks" ? "active" : ""}`} title="任务中心" onClick={() => setActiveView("tasks")}><ListTodo size={18} />任务中心<span className="nav-count alert">{tasks.filter(t => t.status !== "已完成").length}</span></button>}
           <button className={`nav-item ${activeView === "venueRequests" ? "active" : ""}`} title="场地申请" onClick={() => { setActiveView("venueRequests"); setEventWorkspaceOpen(false); }}><MapPin size={18}/>场地申请</button>
-          <button className={`nav-item ${activeView === "departmentServices" ? "active" : ""}`} title="部门办事中心" onClick={() => { setActiveView("departmentServices"); setEventWorkspaceOpen(false); }}><Building2 size={18}/>部门办事中心</button>
+          <button className={`nav-item ${activeView === "departmentServices" ? "active" : ""}`} title="部门办事中心" onClick={() => { setDepartmentServiceTarget(null); setActiveView("departmentServices"); setEventWorkspaceOpen(false); }}><Building2 size={18}/>部门办事中心</button>
           {(userRole === "chair" || userRole === "admin") && <button className={`nav-item ${activeView === "organization" ? "active" : ""}`} title="组织与成员" onClick={() => setActiveView("organization")}><Users size={18} />组织与成员</button>}
           {userRole !== "admin" && <button className={`nav-item ${activeView === "archive" ? "active" : ""}`} title="资料归档" onClick={() => setActiveView("archive")}><FileText size={18} />资料归档</button>}
           {userRole === "admin" && <button className={`nav-item ${activeView === "accounts" ? "active" : ""}`} title="账号与权限" onClick={() => setActiveView("accounts")}><UserCheck size={18}/>账号与权限{accountDirectory.filter((account) => !account.active).length > 0 && <span className="nav-count alert">{accountDirectory.filter((account) => !account.active).length}</span>}</button>}
@@ -662,7 +676,7 @@ export default function Home() {
         {showNotifications && <aside className="notification-panel"><header><div><h2>{userRole === "admin" ? "系统通知" : userRole === "chair" ? "主席通知" : userRole === "leader" ? "负责人通知" : userRole === "teacher" ? "指导教师通知" : "我的通知"}</h2><span>{unreadNotificationCount} 条未读</span></div><button className="icon-button" onClick={() => setShowNotifications(false)}><X size={17}/></button></header><div>{notifications.length ? notifications.map((item) => { const isRead = readNotifications.includes(item.id); return <button key={item.id} className={`${item.level || ""} ${isRead ? "read" : ""}`} onClick={() => openNotification(item)}><i/><span><strong>{item.title}</strong><p>{item.detail}</p><small>{item.time}</small></span></button>; }) : <div className="notification-empty"><Bell size={20}/><strong>暂无通知</strong></div>}</div><footer><button disabled={!unreadNotificationCount} onClick={() => { const ids = notifications.map((item) => item.id); setReadNotifications(ids); if (session) void fetch("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: session.username, ids }) }).catch(() => undefined); setNotice("已将当前通知全部标为已读"); }}>全部标为已读</button></footer></aside>}
 
         <div className="content">
-          {activeView !== "overview" ? <ProductModule user={session} view={activeView} tasks={tasks} activities={activities} archiveItems={archiveItems} role={userRole} onBack={() => { setActiveView("overview"); setEventWorkspaceOpen(userRole === "chair"); }} onOpenTask={setSelected} onCreate={userRole === "chair" ? openNewTask : () => setNotice("只有主席可以发布主任务")} onCreateActivity={() => { setEditingActivity(null); setQuickFlow("activity"); }} onEditActivity={editActivity} onActivityAction={runActivityAction} onUploadArchive={() => setQuickFlow("archive")} notify={handleNotify} pushNotification={pushNotification} /> : userRole !== "chair" ? <RoleDashboard user={session} accounts={accountDirectory} role={userRole} tasks={tasks} activities={activities} subtasks={subtasks} onWorkflowAction={runWorkflowAction} onOpenTask={setSelected} onStartMain={startMainAsLeader} onSubmitMain={submitMainForChair} onWithdrawMain={withdrawMainForLeader} notify={handleNotify} notifications={notifications} /> : !eventWorkspaceOpen ? <ChairOverview tasks={tasks} activities={activities} onOpenTask={setSelected} onOpenActivities={() => setActiveView("activities")} onOpenTasks={() => setActiveView("tasks")}/> : <>
+          {activeView !== "overview" ? <ProductModule user={session} view={activeView} tasks={tasks} activities={activities} archiveItems={archiveItems} role={userRole} departmentServiceTarget={departmentServiceTarget} onBack={() => { setActiveView("overview"); setEventWorkspaceOpen(userRole === "chair"); }} onOpenTask={setSelected} onCreate={userRole === "chair" ? openNewTask : () => setNotice("只有主席可以发布主任务")} onCreateActivity={() => { setEditingActivity(null); setQuickFlow("activity"); }} onEditActivity={editActivity} onActivityAction={runActivityAction} onUploadArchive={() => setQuickFlow("archive")} notify={handleNotify} pushNotification={pushNotification} /> : userRole !== "chair" ? <RoleDashboard user={session} accounts={accountDirectory} role={userRole} tasks={tasks} activities={activities} subtasks={subtasks} onWorkflowAction={runWorkflowAction} onOpenTask={setSelected} onStartMain={startMainAsLeader} onSubmitMain={submitMainForChair} onWithdrawMain={withdrawMainForLeader} onOpenWhiteCards={openWhiteCards} notify={handleNotify} notifications={notifications} /> : !eventWorkspaceOpen ? <div className="role-dashboard-stack"><WhiteCardDashboardTodo user={session} onOpen={openWhiteCards}/><ChairOverview tasks={tasks} activities={activities} onOpenTask={setSelected} onOpenActivities={() => setActiveView("activities")} onOpenTasks={() => setActiveView("tasks")}/></div> : <>
           <section className="event-head">
             <div className="event-title-row">
               <div><span className="event-kicker">校级文体活动 · 筹备中</span><h1>计算学院十佳歌手比赛</h1></div>
@@ -763,13 +777,13 @@ export default function Home() {
             <div className="wizard-body">
               {newStep === 1 && <section className="wizard-section"><div className="wizard-title"><h3>任务范围</h3></div><div className="task-scope-picker"><label><span>所属活动 *</span><select value={draft.activityName === "非活动临时事项" ? "standalone" : activities.find((activity) => activity.name === draft.activityName)?.id || ""} onChange={(event) => selectDraftActivity(event.target.value)}><option value="">请选择活动</option>{activities.filter((activity) => activity.state !== "已归档").map((activity) => <option key={activity.id} value={activity.id}>{activity.name} · {activity.state}</option>)}<option value="standalone">非活动临时事项</option></select></label>{draft.activityName ? <div className="scope-preview"><Activity size={18}/><span><strong>{draft.activityName}</strong><small>{draft.activityName === "非活动临时事项" ? "不进入活动进度，仅在任务中心跟踪" : `${draft.activityTime} · ${draft.activityLocation}`}</small></span><CheckCircle2 size={17}/></div> : <div className="scope-empty"><CircleAlert size={17}/><span>请选择活动后继续</span></div>}</div><div className="wizard-subtitle"><h4>任务类型</h4></div><div className="type-selector compact">{taskTypes.map((type) => { const Icon = type.icon; return <button key={type.name} className={draft.kind === type.name ? "chosen" : ""} onClick={() => setDraft({ ...draft, kind: type.name, dynamic: {} })}><Icon size={20} /><span><strong>{type.name}</strong><small>{type.note}</small></span>{draft.kind === type.name && <CheckCircle2 size={17} className="type-check" />}</button>; })}</div></section>}
 
-              {newStep === 2 && <section className="wizard-section"><div className="wizard-title"><h3>填写任务基本信息</h3></div><div className="form-grid"><label className="span-2"><span>任务名称 *</span><input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder={draft.kind === "物资制作" ? "例如：定制活动主题横幅" : "请输入清晰、可执行的任务名称"} /></label><label className="span-2"><span>任务说明</span><textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="说明任务背景、执行要求和交付结果" rows={3} /></label><label><span>负责部门 *</span><select value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value, person: "待指派" })}><option>科创中心</option><option>心理部</option><option>文艺部</option><option>新媒体中心</option><option>办公室</option></select></label><label><span>执行人（可直接指定负责人）</span><select value={draft.person} onChange={(e) => setDraft({ ...draft, person: e.target.value })}><option>待指派</option>{draftAssignees.map((member) => <option key={`${member.name}-${member.position}`} value={member.name}>{member.name}（{member.position}）</option>)}</select><small className="field-hint">{draftAssignees.length ? `已读取${draft.department}在任成员` : "该部门暂无可指派成员，可先创建后由负责人接收"}</small></label><label><span>截止时间 *</span><input type="datetime-local" value={draft.deadline} onChange={(e) => setDraft({ ...draft, deadline: e.target.value })} /></label><label><span>优先级</span><select value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value })}><option>普通</option><option>重要</option><option>紧急</option></select></label></div></section>}
+              {newStep === 2 && <section className="wizard-section"><div className="wizard-title"><h3>填写任务基本信息</h3></div><div className="form-grid"><label className="span-2"><span>任务名称 *</span><input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder={draft.kind === "物资制作" ? "例如：定制活动主题横幅" : "请输入清晰、可执行的任务名称"} /></label><label className="span-2"><span>任务说明</span><textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="说明任务背景、执行要求和交付结果" rows={3} /></label><label><span>负责部门 *</span><select value={draft.department} onChange={(e) => setDraft({ ...draft, department: e.target.value, person: "待指派" })}><option>科创中心</option><option>心理部</option><option>文艺部</option><option>新媒体中心</option><option>办公室</option></select></label><label><span>执行人（可直接指定负责人）</span><select value={draft.person} onChange={(e) => setDraft({ ...draft, person: e.target.value })}><option>待指派</option>{draftAssignees.map((member) => <option key={`${member.name}-${member.position}`} value={member.name}>{member.name}（{member.position}）</option>)}</select><small className="field-hint">{draftAssignees.length ? `已读取${draft.department}在任成员` : "该部门暂无可指派成员，可先创建后由负责人接收"}</small></label><label><span>计划开始 *</span><input type="datetime-local" value={draft.plannedStartAt} onChange={(e) => setDraft({ ...draft, plannedStartAt: e.target.value })} /></label><label><span>计划完成 *</span><input type="datetime-local" value={draft.plannedEndAt} onChange={(e) => setDraft({ ...draft, plannedEndAt: e.target.value, deadline: e.target.value })} /></label><label><span>优先级</span><select value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value })}><option>普通</option><option>重要</option><option>紧急</option></select></label></div></section>}
               {newStep === 2 && <div className="wizard-activity-context"><div><Activity size={17}/><span><small>所属范围</small><strong>{draft.activityName}</strong></span></div><div><CalendarDays size={17}/><span><small>活动时间</small><strong>{draft.activityTime || "不适用"}</strong></span></div><div><MapPin size={17}/><span><small>活动地点</small><strong>{draft.activityLocation || "不适用"}</strong></span></div><div><UserCheck size={17}/><span><small>指导教师</small><strong>{draft.liaisonTeacher || "未指定"}</strong></span></div></div>}
 
               {newStep === 3 && <section className="wizard-section"><div className="wizard-title"><h3>{draft.kind}的专属参数</h3></div><div className="form-grid dynamic-form">{dynamicSchemas[draft.kind].map((field, index) => <label key={field.key} className={index === dynamicSchemas[draft.kind].length - 1 && dynamicSchemas[draft.kind].length % 2 === 1 ? "span-2" : ""}><span>{field.label}</span><input type={field.type || "text"} value={draft.dynamic[field.key] || ""} onChange={(e) => setDraft({ ...draft, dynamic: { ...draft.dynamic, [field.key]: e.target.value } })} placeholder={field.placeholder} /></label>)}</div><div className="collab-box"><div><Settings size={19} /><span><strong>选择管理强度</strong></span></div><div className="control-mode-grid">{([{name:"快捷办结",note:"口头安排也能做完的小事"},{name:"凭据留痕",note:"提交照片或文件后自动完成"},{name:"负责人确认",note:"关键交付需要负责人确认"}] as {name:ControlMode;note:string}[]).map((mode) => <button type="button" key={mode.name} className={draft.controlMode === mode.name ? "active" : ""} onClick={() => setDraft({...draft, controlMode:mode.name, acceptance:mode.name === "负责人确认"})}><strong>{mode.name}</strong><small>{mode.note}</small></button>)}</div>{draft.controlMode === "负责人确认" && <label className="reviewer-select"><span>确认人</span><select value={draft.reviewer} onChange={(e) => setDraft({ ...draft, reviewer: e.target.value })}><option>科创中心负责人</option><option>活动总负责人</option><option>分管主席（徐介翰）</option><option>文艺部负责人</option></select></label>}</div></section>}
               {newStep === 3 && <div className="wizard-attachment-box"><div><Paperclip size={18}/><span><strong>任务附件</strong><small>支持常见图片、PDF和Office文件，单个不超过20MB</small></span></div><label className="outline-button">{uploading ? "上传中…" : "选择文件"}<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" multiple disabled={uploading} onChange={(event) => { const files = event.currentTarget.files; event.currentTarget.value = ""; uploadFiles(files); }}/></label>{draft.attachments?.length > 0 && <div className="wizard-file-list">{draft.attachments.map((file) => <span key={file.key}><FileText size={14}/><strong>{file.name}</strong><b>{(file.size/1024/1024).toFixed(1)}MB</b><button type="button" title="删除附件" aria-label={`删除${file.name}`} onClick={() => removeDraftAttachment(file)}><X size={12}/></button></span>)}</div>}</div>}
 
-              {newStep === 4 && <section className="wizard-section"><div className="wizard-title"><h3>确认任务信息</h3></div><div className="summary-scope"><Activity size={16}/><span><small>所属范围</small><strong>{draft.activityName}</strong></span></div><div className="create-summary"><div className="summary-main"><span className="tag">{draft.kind}</span><h3>{draft.title || "未填写任务名称"}</h3><p>{draft.description || "暂无补充说明。"}</p></div><dl><div><dt>负责部门</dt><dd>{draft.department}</dd></div><div><dt>执行人</dt><dd>{draft.person}</dd></div><div><dt>截止时间</dt><dd>{draft.deadline ? draft.deadline.replace("T", " ") : "未设置"}</dd></div><div><dt>管理方式</dt><dd>{draft.controlMode}</dd></div></dl><div className="summary-fields">{dynamicSchemas[draft.kind].filter((field) => draft.dynamic[field.key]).map((field) => <div key={field.key}><span>{field.label}</span><strong>{draft.dynamic[field.key]}</strong></div>)}</div><div className="notify-preview"><Bell size={17} /><span><strong>创建后自动通知</strong>{draft.department}负责人{draft.person !== "待指派" ? `、${draft.person}` : ""}{draft.controlMode === "负责人确认" ? `和确认人“${draft.reviewer}”` : ""}</span></div></div></section>}
+              {newStep === 4 && <section className="wizard-section"><div className="wizard-title"><h3>确认任务信息</h3></div><div className="summary-scope"><Activity size={16}/><span><small>所属范围</small><strong>{draft.activityName}</strong></span></div><div className="create-summary"><div className="summary-main"><span className="tag">{draft.kind}</span><h3>{draft.title || "未填写任务名称"}</h3><p>{draft.description || "暂无补充说明。"}</p></div><dl><div><dt>负责部门</dt><dd>{draft.department}</dd></div><div><dt>执行人</dt><dd>{draft.person}</dd></div><div><dt>计划开始</dt><dd>{draft.plannedStartAt ? draft.plannedStartAt.replace("T", " ") : "未设置"}</dd></div><div><dt>计划完成</dt><dd>{draft.plannedEndAt ? draft.plannedEndAt.replace("T", " ") : "未设置"}</dd></div><div><dt>管理方式</dt><dd>{draft.controlMode}</dd></div></dl><div className="summary-fields">{dynamicSchemas[draft.kind].filter((field) => draft.dynamic[field.key]).map((field) => <div key={field.key}><span>{field.label}</span><strong>{draft.dynamic[field.key]}</strong></div>)}</div><div className="notify-preview"><Bell size={17} /><span><strong>创建后自动通知</strong>{draft.department}负责人{draft.person !== "待指派" ? `、${draft.person}` : ""}{draft.controlMode === "负责人确认" ? `和确认人“${draft.reviewer}”` : ""}</span></div></div></section>}
             </div>
 
             <footer className="wizard-actions">

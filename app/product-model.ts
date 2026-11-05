@@ -6,7 +6,7 @@ import { normalizeActivityStage, type ActivityStage } from "./activity-workflow/
 import type { TaskStatus } from "./workflow/state-machine";
 
 export type Attachment = { key: string; name: string; size: number; type?: string };
-export type WorkflowActionPayload = { kind: "task" | "subtask"; id?: string | number; action: string; note?: string; reason?: string; attachment?: Attachment; key?: string; parentTaskId?: number; title?: string; assignee?: string; deadline?: string; evidence?: string; task?: Task };
+export type WorkflowActionPayload = { kind: "task" | "subtask"; id?: string | number; action: string; note?: string; reason?: string; attachment?: Attachment; key?: string; parentTaskId?: number; title?: string; assignee?: string; deadline?: string; plannedStartAt?: string; plannedEndAt?: string; evidence?: string; task?: Task };
 
 export async function deleteAttachmentObject(file: Attachment) {
   if (!file.key) return;
@@ -23,13 +23,18 @@ export type Task = {
   title: string;
   department: string;
   person: string;
+  assigneeAccountId?: number;
+  ownerDepartmentId?: number;
   deadline: string;
   status: TaskStatus;
   risk?: boolean;
   kind: string;
   description: string;
   fields: { label: string; value: string }[];
+  activityId?: string;
   activityName?: string;
+  plannedStartAt?: string;
+  plannedEndAt?: string;
   activityTime?: string;
   activityLocation?: string;
   liaisonTeacher?: string;
@@ -50,7 +55,10 @@ export type TaskDraft = {
   acceptance: boolean;
   controlMode: ControlMode;
   dynamic: Record<string, string>;
+  activityId: string;
   activityName: string;
+  plannedStartAt: string;
+  plannedEndAt: string;
   activityTime: string;
   activityLocation: string;
   liaisonTeacher: string;
@@ -161,13 +169,16 @@ export const emptyDraft: TaskDraft = {
   description: "",
   department: "科创中心",
   person: "待指派",
-  deadline: "2026-09-24T18:00",
+  deadline: "2026-11-10T18:00",
   priority: "普通",
   reviewer: "科创中心负责人",
   acceptance: true,
   controlMode: "凭据留痕",
   dynamic: {},
+  activityId: "",
   activityName: "",
+  plannedStartAt: "2026-11-06T09:00",
+  plannedEndAt: "2026-11-10T18:00",
   activityTime: "",
   activityLocation: "",
   liaisonTeacher: "",
@@ -400,7 +411,7 @@ export const fallbackAssignees: Record<string, { name: string; position: string;
 };
 
 export type UserRole = "admin" | "chair" | "leader" | "staff" | "teacher";
-export type NotificationEntity = { type: "task" | "subtask" | "activity" | "officeRequest" | "venueRequest" | "meetingRound" | "meetingReport" | "purchase" | "lostFound" | "account" | "archive" | "system"; id?: string | number; parentTaskId?: number };
+export type NotificationEntity = { type: "task" | "subtask" | "activity" | "officeRequest" | "venueRequest" | "meetingRound" | "meetingReport" | "purchase" | "lostFound" | "white_card" | "account" | "archive" | "system"; id?: string | number; parentTaskId?: number };
 export type NotificationRecord = {
   id: string;
   recipientUsernames: string[];
@@ -435,7 +446,7 @@ export const seedNotificationRecords: NotificationRecord[] = [
   { id: "seed-teacher-guidance", recipientUsernames: ["teacher"], title: "活动方案等待指导", detail: "计算学院十佳歌手比赛执行方案等待指导意见。", createdAt: "2026-08-16T08:50:00+08:00", level: "warning", entity: { type: "activity", id: "top-singer" } },
 ];
 export type DelegatedStatus = "待开始" | "进行中" | "待验收" | "需修改" | "已完成";
-export type DelegatedTask = { id?: string; parentTaskId?: number; title: string; parent: string; assignee: string; deadline: string; evidence: string; status: DelegatedStatus; completedBy?: string; completionNote?: string; attachments?: Attachment[]; lastAction?: string };
+export type DelegatedTask = { id?: string; parentTaskId?: number; title: string; parent: string; assignee: string; deadline: string; plannedStartAt?: string; plannedEndAt?: string; evidence: string; status: DelegatedStatus; completedBy?: string; completionNote?: string; attachments?: Attachment[]; lastAction?: string };
 
 export const isSubtaskOf = (subtask: DelegatedTask, task: Task) => subtask.parentTaskId ? subtask.parentTaskId === task.id : subtask.parent === task.title;
 export const initialSubtasks: DelegatedTask[] = [

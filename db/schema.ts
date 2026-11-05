@@ -261,7 +261,12 @@ export const tasks = sqliteTable("tasks", {
   kind: text("kind").notNull().default(""),
   description: text("description").notNull().default(""),
   fieldsJson: text("fields_json").notNull().default("[]"),
+  activityId: text("activity_id").notNull().default(""),
+  assigneeAccountId: integer("assignee_account_id"),
+  ownerDepartmentId: integer("owner_department_id"),
   activityName: text("activity_name"),
+  plannedStartAt: text("planned_start_at").notNull().default(""),
+  plannedEndAt: text("planned_end_at").notNull().default(""),
   activityTime: text("activity_time"),
   activityLocation: text("activity_location"),
   liaisonTeacher: text("liaison_teacher"),
@@ -270,7 +275,11 @@ export const tasks = sqliteTable("tasks", {
   lastAction: text("last_action"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-});
+}, (table) => [
+  index("idx_tasks_activity").on(table.activityId),
+  index("idx_tasks_assignee_account").on(table.assigneeAccountId),
+  index("idx_tasks_owner_department").on(table.ownerDepartmentId),
+]);
 
 export const subtasks = sqliteTable("subtasks", {
   id: text("id").primaryKey(),
@@ -278,7 +287,10 @@ export const subtasks = sqliteTable("subtasks", {
   parent: text("parent").notNull().default(""),
   title: text("title").notNull(),
   assignee: text("assignee").notNull(),
+  assigneeAccountId: integer("assignee_account_id"),
   deadline: text("deadline").notNull().default(""),
+  plannedStartAt: text("planned_start_at").notNull().default(""),
+  plannedEndAt: text("planned_end_at").notNull().default(""),
   evidence: text("evidence").notNull().default(""),
   status: text("status").notNull(),
   completedBy: text("completed_by"),
@@ -287,4 +299,38 @@ export const subtasks = sqliteTable("subtasks", {
   lastAction: text("last_action"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
-}, (table) => [index("idx_subtasks_parent").on(table.parentTaskId)]);
+}, (table) => [
+  index("idx_subtasks_parent").on(table.parentTaskId),
+  index("idx_subtasks_assignee_account").on(table.assigneeAccountId),
+]);
+
+export const whiteCardSubmissions = sqliteTable("white_card_submissions", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  status: text("status").notNull(),
+  submitterUsername: text("submitter_username").notNull(),
+  submitterName: text("submitter_name").notNull(),
+  attachmentsJson: text("attachments_json").notNull().default("[]"),
+  handlerUsername: text("handler_username").notNull().default(""),
+  handlerName: text("handler_name").notNull().default(""),
+  articleUrl: text("article_url").notNull().default(""),
+  reviewerUsername: text("reviewer_username").notNull().default(""),
+  reviewerName: text("reviewer_name").notNull().default(""),
+  returnTarget: text("return_target").notNull().default(""),
+  returnReason: text("return_reason").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  archivedAt: text("archived_at").notNull().default(""),
+}, (table) => [index("idx_white_card_submissions_status").on(table.status, table.updatedAt)]);
+
+export const whiteCardEvents = sqliteTable("white_card_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  submissionId: text("submission_id").notNull(),
+  action: text("action").notNull(),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  actorUsername: text("actor_username").notNull(),
+  actorName: text("actor_name").notNull(),
+  note: text("note").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [index("idx_white_card_events_submission").on(table.submissionId, table.id)]);

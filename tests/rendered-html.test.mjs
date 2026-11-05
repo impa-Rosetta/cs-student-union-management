@@ -34,7 +34,7 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
     readFile(new URL("../app/workflow/apply-task-action.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/product-model.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/views.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/office-workspace.tsx", import.meta.url), "utf8").then(async (source) => source + "\n" + await readFile(new URL("../app/department-service-hub.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/life-department-workspace.tsx", import.meta.url), "utf8")),
+    readFile(new URL("../app/office-workspace.tsx", import.meta.url), "utf8").then(async (source) => source + "\n" + await readFile(new URL("../app/department-service-hub.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/life-department-workspace.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/learning-department-workspace.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/teacher-supervision-dashboard.tsx", import.meta.url), "utf8")),
   ]);
   const page = pageSrc + "\n" + viewsSrc + "\n" + officeSrc;
 
@@ -106,7 +106,9 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /系统管理总览/);
   assert.match(page, /账号与权限/);
   assert.match(page, /审计日志/);
-  assert.match(page, /指导教师工作台/);
+  assert.match(page, /教师监管中心/);
+  assert.match(page, /活动任务分解与计划/);
+  assert.match(page, /教师账号只能查看/);
   assert.match(page, /非活动临时事项/);
   assert.doesNotMatch(page, /先确定任务所属范围/);
   assert.match(page, /activityName: ""/);
@@ -125,6 +127,9 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /寝室查寝/);
   assert.match(page, /失物招领/);
   assert.match(page, /api\/life-department/);
+  assert.match(page, /白卡制作与审核/);
+  assert.match(page, /下载 Excel 模板/);
+  assert.match(page, /api\/learning-department/);
   assert.match(page, /api\/office-requests/);
   assert.match(page, /编辑申请/);
   assert.match(page, /保存并提交/);

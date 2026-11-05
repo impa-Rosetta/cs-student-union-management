@@ -15,7 +15,13 @@ export interface WorkflowTask {
   title: string;
   department: string;
   person: string;
+  assigneeAccountId?: number;
+  ownerDepartmentId?: number;
   status: TaskStatus;
+  activityId?: string;
+  activityName?: string;
+  plannedStartAt?: string;
+  plannedEndAt?: string;
   controlMode?: ControlMode;
   lastAction?: string;
   attachments?: WorkflowAttachment[];
@@ -27,7 +33,10 @@ export interface WorkflowSubtask {
   parent?: string;
   title: string;
   assignee: string;
+  assigneeAccountId?: number;
   deadline?: string;
+  plannedStartAt?: string;
+  plannedEndAt?: string;
   evidence?: string;
   status: SubtaskStatus;
   completedBy?: string;

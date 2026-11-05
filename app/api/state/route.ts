@@ -7,16 +7,22 @@ import { listAllSubtasks, listAllTasks } from "../../task-store.ts";
 import { listNotifications } from "../../notification-store.ts";
 import { listActivities } from "../../activity-store.ts";
 import { listArchiveRecords } from "../../archive-store.ts";
+import { applyCalculatedActivityProgress } from "../../work-management/activity-progress.ts";
+import { scopeSharedState } from "../../work-management/scope.ts";
 
 export async function GET(request: Request) {
   try {
-    await requireRole(request);
-    const state: Record<string, unknown> = {};
-    state.tasks = await listAllTasks();
-    state.subtasks = await listAllSubtasks();
-    state.notifications = await listNotifications();
-    state.activities = await listActivities();
-    state.archive = await listArchiveRecords();
+    const auth = await requireRole(request);
+    const tasks = await listAllTasks();
+    const subtasks = await listAllSubtasks();
+    const activities = applyCalculatedActivityProgress(await listActivities(), tasks, subtasks);
+    const state = scopeSharedState({
+      tasks,
+      subtasks,
+      notifications: await listNotifications(),
+      activities,
+      archive: await listArchiveRecords(),
+    }, auth.user);
     return Response.json({ state });
   } catch (error) {
     return authErrorResponse(error, "读取共享数据失败");

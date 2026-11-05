@@ -177,7 +177,10 @@ export interface CreateTaskInput extends WorkflowTask {
   description?: string;
   risk?: boolean;
   fields?: unknown[];
+  activityId?: string;
   activityName?: string;
+  plannedStartAt?: string;
+  plannedEndAt?: string;
   activityTime?: string;
   activityLocation?: string;
   liaisonTeacher?: string;

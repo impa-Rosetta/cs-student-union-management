@@ -45,13 +45,15 @@ const EXPECTED = {
   organization_assessment_cycles:["id","name","type","status","start_date","end_date","scope","instructions","owner_name","created_at","updated_at"],
   organization_assessment_records:["id","cycle_id","member_id","member_name","score","grade","comment","improvement","entered_by","updated_at"],
   organization_affairs:["id","category","title","status","owner_name","participant_names","deadline","external_platform","external_reference","materials","result","attachments_json","created_at","updated_at","archived_at"],
+  white_card_submissions: ["id","title","status","submitter_username","submitter_name","attachments_json","handler_username","handler_name","article_url","reviewer_username","reviewer_name","return_target","return_reason","created_at","updated_at","archived_at"],
+  white_card_events: ["id","submission_id","action","from_status","to_status","actor_username","actor_name","note","created_at"],
   archive_records: ["id", "academic_year", "semester", "activity", "category", "name", "owner", "time", "size", "object_key", "description", "created_at"],
   task_type_schemas: ["name", "note", "icon", "fields_json", "sort_order"],
   system_config: ["id", "attachment_limit", "academic_year_month", "semester_boundary", "notification_days", "backup_time", "updated_by", "updated_at"],
   research_items: ["id", "name", "requester", "status", "detail", "sort_order", "created_at", "updated_at"],
   workflow_records: ["id", "kind", "payload_json", "created_at"],
-  tasks: ["id", "title", "department", "person", "deadline", "status", "risk", "kind", "description", "fields_json", "activity_name", "activity_time", "activity_location", "liaison_teacher", "attachments_json", "control_mode", "last_action", "created_at", "updated_at"],
-  subtasks: ["id", "parent_task_id", "parent", "title", "assignee", "deadline", "evidence", "status", "completed_by", "completion_note", "attachments_json", "last_action", "created_at", "updated_at"],
+  tasks: ["id", "title", "department", "person", "deadline", "status", "risk", "kind", "description", "fields_json", "activity_id", "assignee_account_id", "owner_department_id", "activity_name", "planned_start_at", "planned_end_at", "activity_time", "activity_location", "liaison_teacher", "attachments_json", "control_mode", "last_action", "created_at", "updated_at"],
+  subtasks: ["id", "parent_task_id", "parent", "title", "assignee", "assignee_account_id", "deadline", "planned_start_at", "planned_end_at", "evidence", "status", "completed_by", "completion_note", "attachments_json", "last_action", "created_at", "updated_at"],
 };
 
 function stripBackticks(name) {

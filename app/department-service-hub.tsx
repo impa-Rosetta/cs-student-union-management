@@ -6,6 +6,7 @@ import type { ActivityRecord, DemoUser, OrgDepartment, OrgSnapshot, UserRole } f
 import { OfficeWorkspace } from "./office-workspace";
 import { LifeDepartmentWorkspace } from "./life-department-workspace";
 import { OrganizationDepartmentWorkspace } from "./organization-department-workspace";
+import { LearningDepartmentWorkspace } from "./learning-department-workspace";
 
 const FALLBACK_DEPARTMENTS = [
   "办公室", "实践部", "生活部", "党员之家", "组织部", "心理部", "科创中心",
@@ -28,9 +29,9 @@ const departmentDescriptions: Record<string, string> = {
   科创中心: "科创项目、程序设计竞赛、设备保障与技术支持",
 };
 
-export function DepartmentServiceHub({ user, role, activities, notify }: { user: DemoUser; role: UserRole; activities: ActivityRecord[]; notify: (message: string) => void }) {
+export function DepartmentServiceHub({ user, role, activities, notify, initialDepartment = null }: { user: DemoUser; role: UserRole; activities: ActivityRecord[]; notify: (message: string) => void; initialDepartment?: string | null }) {
   const [departments, setDepartments] = useState<OrgDepartment[]>(FALLBACK_DEPARTMENTS);
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(initialDepartment);
 
   // 首次进入时读取当前组织架构，失败时使用与组织种子一致的兜底名单。
   useEffect(() => { void fetch("/api/organization").then((response) => response.ok ? response.json() : null).then((result: OrgSnapshot | null) => { if (result?.departments?.length) setDepartments(result.departments.slice().sort((a, b) => a.sortOrder - b.sortOrder)); }).catch(() => undefined); }, []);
@@ -47,6 +48,10 @@ export function DepartmentServiceHub({ user, role, activities, notify }: { user:
     return <OrganizationDepartmentWorkspace user={user} role={role} notify={notify} onBack={() => setSelectedDepartment(null)}/>;
   }
 
+  if (selectedDepartment === "学习部" || selectedDepartment === "新媒体中心") {
+    return <LearningDepartmentWorkspace user={user} role={role} notify={notify} entryDepartment={selectedDepartment} onBack={() => setSelectedDepartment(null)}/>;
+  }
+
   if (selectedDepartment) {
     return <div className="module-page department-placeholder">
       <button className="department-back" onClick={() => setSelectedDepartment(null)}><ArrowLeft size={15}/>返回全部部门</button>
@@ -54,11 +59,11 @@ export function DepartmentServiceHub({ user, role, activities, notify }: { user:
     </div>;
   }
 
-  const availableDepartments = new Set(["办公室", "生活部", "组织部"]);
+  const availableDepartments = new Set(["办公室", "生活部", "组织部", "学习部", "新媒体中心"]);
   const availableCount = departments.filter((department) => availableDepartments.has(department.name)).length;
   return <div className="module-page department-service-hub">
     <div className="module-header"><div><span className="module-kicker">学生联盟统一服务入口</span><h1>部门办事中心</h1><p>选择需要办理业务的部门，进入对应的专属办事工作区。</p></div><div className="department-hub-summary"><ClipboardCheck size={18}/><span><strong>{availableCount} 个中心已上线</strong><small>{departments.length} 个部门持续建设中</small></span></div></div>
-    <section className="department-guide"><FileText size={18}/><div><strong>按业务归口选择部门</strong><span>办公室负责场地审核办理和例会通报汇总；场地申请本身已作为全体部门可用的独立功能放在主导航。生活部支持采购、查寝和失物招领，组织部支持成员异动、考核与组织事务。</span></div></section>
+    <section className="department-guide"><FileText size={18}/><div><strong>按业务归口选择部门</strong><span>办公室负责场地审核办理和例会通报汇总；生活部支持采购、查寝和失物招领；组织部支持成员异动、考核与组织事务；学习部与新媒体中心共同处理白卡制作及主席审核。</span></div></section>
     <div className="department-card-grid">{departments.map((department) => {
       const ready = availableDepartments.has(department.name);
       return <button key={department.id} className={ready ? "ready" : "planned"} onClick={() => setSelectedDepartment(department.name)}><i>{department.name.slice(0, 1)}</i><span><strong>{department.name}</strong><small>{departmentDescriptions[department.name] || "专属办事流程待梳理"}</small><em>{ready ? "已上线" : "筹备中"}</em></span><ChevronRight size={17}/></button>;

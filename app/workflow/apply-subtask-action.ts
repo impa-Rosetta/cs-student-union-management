@@ -210,6 +210,8 @@ export interface CreateSubtaskInput {
   title: string;
   assignee: string;
   deadline?: string;
+  plannedStartAt?: string;
+  plannedEndAt?: string;
   evidence?: string;
 }
 
@@ -240,6 +242,8 @@ export function createSubtask(
     title,
     assignee,
     deadline: input.deadline,
+    plannedStartAt: input.plannedStartAt,
+    plannedEndAt: input.plannedEndAt,
     evidence: input.evidence,
     status: "待开始",
     lastAction: `${actor.name}已分派给${assignee}`,

@@ -4,6 +4,7 @@
 import { getDb } from "./db.ts";
 
 const db = getDb();
+let taskSchemaPromise: Promise<void> | null = null;
 
 export type TaskEntity = Record<string, unknown> & { id: number };
 export type SubtaskEntity = Record<string, unknown> & { id: string };
@@ -19,7 +20,12 @@ interface TaskRow {
   kind: string;
   description: string;
   fields_json: string;
+  activity_id: string;
+  assignee_account_id: number | null;
+  owner_department_id: number | null;
   activity_name: string | null;
+  planned_start_at: string;
+  planned_end_at: string;
   activity_time: string | null;
   activity_location: string | null;
   liaison_teacher: string | null;
@@ -35,6 +41,9 @@ interface SubtaskRow {
   title: string;
   assignee: string;
   deadline: string;
+  planned_start_at: string;
+  planned_end_at: string;
+  assignee_account_id: number | null;
   evidence: string;
   status: string;
   completed_by: string | null;
@@ -56,7 +65,7 @@ function setIfPresent(target: Record<string, unknown>, key: string, value: unkno
   if (value !== null && value !== undefined) target[key] = value;
 }
 
-export async function ensureTaskSchema() {
+async function prepareTaskSchema() {
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS tasks (
       id INTEGER PRIMARY KEY,
@@ -69,7 +78,12 @@ export async function ensureTaskSchema() {
       kind TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
       fields_json TEXT NOT NULL DEFAULT '[]',
+      activity_id TEXT NOT NULL DEFAULT '',
+      assignee_account_id INTEGER,
+      owner_department_id INTEGER,
       activity_name TEXT,
+      planned_start_at TEXT NOT NULL DEFAULT '',
+      planned_end_at TEXT NOT NULL DEFAULT '',
       activity_time TEXT,
       activity_location TEXT,
       liaison_teacher TEXT,
@@ -86,6 +100,9 @@ export async function ensureTaskSchema() {
       title TEXT NOT NULL,
       assignee TEXT NOT NULL,
       deadline TEXT NOT NULL DEFAULT '',
+      planned_start_at TEXT NOT NULL DEFAULT '',
+      planned_end_at TEXT NOT NULL DEFAULT '',
+      assignee_account_id INTEGER,
       evidence TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL,
       completed_by TEXT,
@@ -97,6 +114,65 @@ export async function ensureTaskSchema() {
     )`),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_subtasks_parent ON subtasks(parent_task_id)"),
   ]);
+  const taskColumns = await db.prepare("PRAGMA table_info(tasks)").all<{ name: string }>();
+  if (!taskColumns.results.some((column) => column.name === "activity_id")) await db.prepare("ALTER TABLE tasks ADD COLUMN activity_id TEXT NOT NULL DEFAULT ''").run();
+  if (!taskColumns.results.some((column) => column.name === "planned_start_at")) await db.prepare("ALTER TABLE tasks ADD COLUMN planned_start_at TEXT NOT NULL DEFAULT ''").run();
+  if (!taskColumns.results.some((column) => column.name === "planned_end_at")) await db.prepare("ALTER TABLE tasks ADD COLUMN planned_end_at TEXT NOT NULL DEFAULT ''").run();
+  if (!taskColumns.results.some((column) => column.name === "assignee_account_id")) await db.prepare("ALTER TABLE tasks ADD COLUMN assignee_account_id INTEGER").run();
+  if (!taskColumns.results.some((column) => column.name === "owner_department_id")) await db.prepare("ALTER TABLE tasks ADD COLUMN owner_department_id INTEGER").run();
+  await db.prepare("CREATE INDEX IF NOT EXISTS idx_tasks_activity ON tasks(activity_id)").run();
+  const subtaskColumns = await db.prepare("PRAGMA table_info(subtasks)").all<{ name: string }>();
+  if (!subtaskColumns.results.some((column) => column.name === "planned_start_at")) await db.prepare("ALTER TABLE subtasks ADD COLUMN planned_start_at TEXT NOT NULL DEFAULT ''").run();
+  if (!subtaskColumns.results.some((column) => column.name === "planned_end_at")) await db.prepare("ALTER TABLE subtasks ADD COLUMN planned_end_at TEXT NOT NULL DEFAULT ''").run();
+  if (!subtaskColumns.results.some((column) => column.name === "assignee_account_id")) await db.prepare("ALTER TABLE subtasks ADD COLUMN assignee_account_id INTEGER").run();
+  await db.batch([
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_tasks_assignee_account ON tasks(assignee_account_id)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_tasks_owner_department ON tasks(owner_department_id)"),
+    db.prepare("CREATE INDEX IF NOT EXISTS idx_subtasks_assignee_account ON subtasks(assignee_account_id)"),
+  ]);
+  await db.prepare(`UPDATE tasks SET assignee_account_id = (
+    SELECT CASE WHEN COUNT(*) = 1 THEN MAX(id) ELSE NULL END FROM app_accounts
+    WHERE active = 1 AND name = tasks.person AND department = tasks.department
+  ) WHERE assignee_account_id IS NULL`).run();
+  await db.prepare(`UPDATE subtasks SET assignee_account_id = (
+    SELECT CASE WHEN COUNT(*) = 1 THEN MAX(app_accounts.id) ELSE NULL END
+    FROM app_accounts JOIN tasks ON tasks.id = subtasks.parent_task_id
+    WHERE app_accounts.active = 1 AND app_accounts.name = subtasks.assignee
+      AND app_accounts.department = tasks.department
+  ) WHERE assignee_account_id IS NULL`).run();
+  try {
+    await db.prepare(`UPDATE tasks SET owner_department_id = (
+      SELECT CASE WHEN COUNT(*) = 1 THEN MAX(id) ELSE NULL END FROM departments
+      WHERE name = tasks.department
+    ) WHERE owner_department_id IS NULL`).run();
+  } catch {
+    // 旧库组织目录尚未初始化时稍后再次迁移。
+  }
+  // 只补齐仓库自带的十佳歌手演示任务；用户后来创建的历史任务仍保持“日期未完善”。
+  await db.prepare(`UPDATE tasks SET activity_id = 'top-singer', activity_name = '计算学院十佳歌手比赛'
+    WHERE activity_id = '' AND COALESCE(activity_name, '') = '' AND id BETWEEN 1 AND 9`).run();
+  await db.prepare(`UPDATE tasks SET
+    planned_start_at = CASE id
+      WHEN 1 THEN '2026-09-16T09:00:00+08:00' WHEN 2 THEN '2026-09-17T09:00:00+08:00' WHEN 3 THEN '2026-09-18T09:00:00+08:00'
+      WHEN 4 THEN '2026-09-25T20:30:00+08:00' WHEN 5 THEN '2026-09-25T15:30:00+08:00' WHEN 6 THEN '2026-09-17T09:00:00+08:00'
+      WHEN 7 THEN '2026-09-25T16:00:00+08:00' WHEN 8 THEN '2026-09-25T20:00:00+08:00' WHEN 9 THEN '2026-09-25T20:00:00+08:00' ELSE planned_start_at END,
+    planned_end_at = CASE id
+      WHEN 1 THEN '2026-09-20T18:00:00+08:00' WHEN 2 THEN '2026-09-21T12:00:00+08:00' WHEN 3 THEN '2026-09-23T21:30:00+08:00'
+      WHEN 4 THEN '2026-09-25T22:00:00+08:00' WHEN 5 THEN '2026-09-25T17:30:00+08:00' WHEN 6 THEN '2026-09-19T20:00:00+08:00'
+      WHEN 7 THEN '2026-09-26T12:00:00+08:00' WHEN 8 THEN '2026-09-26T20:00:00+08:00' WHEN 9 THEN '2026-09-28T18:00:00+08:00' ELSE planned_end_at END
+    WHERE id BETWEEN 1 AND 9 AND planned_start_at = '' AND planned_end_at = ''`).run();
+  await db.prepare(`UPDATE subtasks SET planned_start_at = '2026-09-20T09:00:00+08:00', planned_end_at = '2026-09-22T20:00:00+08:00'
+    WHERE id = 'seed-light-console' AND planned_start_at = '' AND planned_end_at = ''`).run();
+}
+
+export function ensureTaskSchema() {
+  if (!taskSchemaPromise) {
+    taskSchemaPromise = prepareTaskSchema().catch((error) => {
+      taskSchemaPromise = null;
+      throw error;
+    });
+  }
+  return taskSchemaPromise;
 }
 
 function rowToTask(row: TaskRow): TaskEntity {
@@ -112,6 +188,11 @@ function rowToTask(row: TaskRow): TaskEntity {
     description: row.description,
     fields: safeParse(row.fields_json, []),
     attachments: safeParse(row.attachments_json, []),
+    activityId: row.activity_id,
+    assigneeAccountId: row.assignee_account_id ?? undefined,
+    ownerDepartmentId: row.owner_department_id ?? undefined,
+    plannedStartAt: row.planned_start_at,
+    plannedEndAt: row.planned_end_at,
   };
   setIfPresent(task, "activityName", row.activity_name);
   setIfPresent(task, "activityTime", row.activity_time);
@@ -133,6 +214,9 @@ function rowToSubtask(row: SubtaskRow): SubtaskEntity {
     evidence: row.evidence,
     status: row.status,
     attachments: safeParse(row.attachments_json, []),
+    plannedStartAt: row.planned_start_at,
+    plannedEndAt: row.planned_end_at,
+    assigneeAccountId: row.assignee_account_id ?? undefined,
   };
   setIfPresent(subtask, "completedBy", row.completed_by);
   setIfPresent(subtask, "completionNote", row.completion_note);
@@ -176,12 +260,13 @@ export async function listAllSubtasks(): Promise<SubtaskEntity[]> {
 export async function upsertTasks(tasks: TaskEntity[]): Promise<void> {
   if (!tasks.length) return;
   await ensureTaskSchema();
-  const statements = tasks.map((task) => {
+  const ownership = await resolveOwnership(tasks, []);
+  const statements = ownership.tasks.map((task) => {
     const fieldsJson = JSON.stringify(task.fields ?? []);
     const attachmentsJson = JSON.stringify(task.attachments ?? []);
-    return db.prepare(`INSERT INTO tasks (id, title, department, person, deadline, status, risk, kind, description, fields_json, activity_name, activity_time, activity_location, liaison_teacher, attachments_json, control_mode, last_action, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET title=excluded.title, department=excluded.department, person=excluded.person, deadline=excluded.deadline, status=excluded.status, risk=excluded.risk, kind=excluded.kind, description=excluded.description, fields_json=excluded.fields_json, activity_name=excluded.activity_name, activity_time=excluded.activity_time, activity_location=excluded.activity_location, liaison_teacher=excluded.liaison_teacher, attachments_json=excluded.attachments_json, control_mode=excluded.control_mode, last_action=excluded.last_action, updated_at=CURRENT_TIMESTAMP`)
+    return db.prepare(`INSERT INTO tasks (id, title, department, person, deadline, status, risk, kind, description, fields_json, activity_id, assignee_account_id, owner_department_id, activity_name, planned_start_at, planned_end_at, activity_time, activity_location, liaison_teacher, attachments_json, control_mode, last_action, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET title=excluded.title, department=excluded.department, person=excluded.person, deadline=excluded.deadline, status=excluded.status, risk=excluded.risk, kind=excluded.kind, description=excluded.description, fields_json=excluded.fields_json, activity_id=excluded.activity_id, assignee_account_id=excluded.assignee_account_id, owner_department_id=excluded.owner_department_id, activity_name=excluded.activity_name, planned_start_at=excluded.planned_start_at, planned_end_at=excluded.planned_end_at, activity_time=excluded.activity_time, activity_location=excluded.activity_location, liaison_teacher=excluded.liaison_teacher, attachments_json=excluded.attachments_json, control_mode=excluded.control_mode, last_action=excluded.last_action, updated_at=CURRENT_TIMESTAMP`)
       .bind(
         task.id,
         String(task.title ?? ""),
@@ -193,7 +278,12 @@ export async function upsertTasks(tasks: TaskEntity[]): Promise<void> {
         String(task.kind ?? ""),
         String(task.description ?? ""),
         fieldsJson,
+        String(task.activityId ?? ""),
+        task.assigneeAccountId != null ? Number(task.assigneeAccountId) : null,
+        task.ownerDepartmentId != null ? Number(task.ownerDepartmentId) : null,
         task.activityName != null ? String(task.activityName) : null,
+        String(task.plannedStartAt ?? ""),
+        String(task.plannedEndAt ?? ""),
         task.activityTime != null ? String(task.activityTime) : null,
         task.activityLocation != null ? String(task.activityLocation) : null,
         task.liaisonTeacher != null ? String(task.liaisonTeacher) : null,
@@ -208,18 +298,22 @@ export async function upsertTasks(tasks: TaskEntity[]): Promise<void> {
 export async function upsertSubtasks(subtasks: SubtaskEntity[]): Promise<void> {
   if (!subtasks.length) return;
   await ensureTaskSchema();
-  const statements = subtasks.map((subtask) => {
+  const ownership = await resolveOwnership([], subtasks);
+  const statements = ownership.subtasks.map((subtask) => {
     const attachmentsJson = JSON.stringify(subtask.attachments ?? []);
-    return db.prepare(`INSERT INTO subtasks (id, parent_task_id, parent, title, assignee, deadline, evidence, status, completed_by, completion_note, attachments_json, last_action, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET parent_task_id=excluded.parent_task_id, parent=excluded.parent, title=excluded.title, assignee=excluded.assignee, deadline=excluded.deadline, evidence=excluded.evidence, status=excluded.status, completed_by=excluded.completed_by, completion_note=excluded.completion_note, attachments_json=excluded.attachments_json, last_action=excluded.last_action, updated_at=CURRENT_TIMESTAMP`)
+    return db.prepare(`INSERT INTO subtasks (id, parent_task_id, parent, title, assignee, assignee_account_id, deadline, planned_start_at, planned_end_at, evidence, status, completed_by, completion_note, attachments_json, last_action, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET parent_task_id=excluded.parent_task_id, parent=excluded.parent, title=excluded.title, assignee=excluded.assignee, assignee_account_id=excluded.assignee_account_id, deadline=excluded.deadline, planned_start_at=excluded.planned_start_at, planned_end_at=excluded.planned_end_at, evidence=excluded.evidence, status=excluded.status, completed_by=excluded.completed_by, completion_note=excluded.completion_note, attachments_json=excluded.attachments_json, last_action=excluded.last_action, updated_at=CURRENT_TIMESTAMP`)
       .bind(
         subtask.id,
         subtask.parentTaskId != null ? Number(subtask.parentTaskId) : null,
         String(subtask.parent ?? ""),
         String(subtask.title ?? ""),
         String(subtask.assignee ?? ""),
+        subtask.assigneeAccountId != null ? Number(subtask.assigneeAccountId) : null,
         String(subtask.deadline ?? ""),
+        String(subtask.plannedStartAt ?? ""),
+        String(subtask.plannedEndAt ?? ""),
         String(subtask.evidence ?? ""),
         String(subtask.status ?? ""),
         subtask.completedBy != null ? String(subtask.completedBy) : null,
@@ -229,6 +323,44 @@ export async function upsertSubtasks(subtasks: SubtaskEntity[]): Promise<void> {
       );
   });
   await db.batch(statements);
+}
+
+type OwnershipAccount = { id: number; name: string; department: string };
+type OwnershipDepartment = { id: number; name: string };
+
+async function resolveOwnership(tasks: TaskEntity[], subtasks: SubtaskEntity[]) {
+  const accountRows = await db.prepare("SELECT id, name, department FROM app_accounts WHERE active = 1").all<OwnershipAccount>();
+  let departments: OwnershipDepartment[] = [];
+  try {
+    const departmentRows = await db.prepare("SELECT id, name FROM departments").all<OwnershipDepartment>();
+    departments = departmentRows.results || [];
+  } catch {
+    // 旧库可能尚未初始化组织目录；姓名快照仍可工作，后续迁移可再次回填。
+  }
+  const accounts = accountRows.results || [];
+  const persistedTasks = tasks.map((task) => ({ ...task }));
+  const existingTasks = subtasks.length ? await listAllTasks() : [];
+  const taskById = new Map([...existingTasks, ...persistedTasks].map((task) => [Number(task.id), task]));
+
+  for (const task of persistedTasks) {
+    if (task.assigneeAccountId == null) {
+      const matches = accounts.filter((account) => account.name === String(task.person || "") && account.department === String(task.department || ""));
+      if (matches.length === 1) task.assigneeAccountId = matches[0].id;
+    }
+    if (task.ownerDepartmentId == null) {
+      const matches = departments.filter((department) => department.name === String(task.department || ""));
+      if (matches.length === 1) task.ownerDepartmentId = matches[0].id;
+    }
+  }
+
+  const persistedSubtasks = subtasks.map((subtask) => ({ ...subtask }));
+  for (const subtask of persistedSubtasks) {
+    if (subtask.assigneeAccountId != null) continue;
+    const parent = taskById.get(Number(subtask.parentTaskId));
+    const matches = accounts.filter((account) => account.name === String(subtask.assignee || "") && (!parent || account.department === String(parent.department || "")));
+    if (matches.length === 1) subtask.assigneeAccountId = matches[0].id;
+  }
+  return { tasks: persistedTasks, subtasks: persistedSubtasks };
 }
 
 /** 对比前后实体，返回新增或发生变化（用于只 upsert 真正变动的实体）。 */

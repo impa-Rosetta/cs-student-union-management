@@ -38,6 +38,8 @@ export async function POST(request: Request) {
       title?: string;
       assignee?: string;
       deadline?: string;
+      plannedStartAt?: string;
+      plannedEndAt?: string;
       evidence?: string;
       task?: TaskEntity;
     };
@@ -62,6 +64,8 @@ export async function POST(request: Request) {
         title: body.title || "",
         assignee: body.assignee || "",
         deadline: body.deadline,
+        plannedStartAt: body.plannedStartAt,
+        plannedEndAt: body.plannedEndAt,
         evidence: body.evidence,
       });
     } else if (body.kind === "subtask" && body.id && body.action) {

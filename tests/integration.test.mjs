@@ -41,6 +41,8 @@ let organizationRoute;
 let officeRequestsRoute;
 let lifeDepartmentRoute;
 let organizationDepartmentRoute;
+let learningDepartmentRoute;
+let teacherSupervisionRoute;
 
 const USERS = [
   { email: "admin@demo.local", username: "admin", name: "管理员", role: "admin", department: "系统管理" },
@@ -48,6 +50,8 @@ const USERS = [
   { email: "leader@demo.local", username: "leader", name: "负责人", role: "leader", department: "科创中心" },
   { email: "staff@demo.local", username: "staff", name: "干事", role: "staff", department: "科创中心" },
   { email: "teacher@demo.local", username: "teacher", name: "指导教师", role: "teacher", department: "指导教师" },
+  { email: "learning@demo.local", username: "learning", name: "学习部干事", role: "staff", department: "学习部" },
+  { email: "media@demo.local", username: "media", name: "新媒体干事", role: "staff", department: "新媒体中心" },
 ];
 
 const VALID_CONFIG = { attachmentLimit: "50", academicYearMonth: "8", semesterBoundary: "按学院校历", notificationDays: "180", backupTime: "23:30" };
@@ -135,6 +139,8 @@ before(async () => {
   officeRequestsRoute = await import("../app/api/office-requests/route.ts");
   lifeDepartmentRoute = await import("../app/api/life-department/route.ts");
   organizationDepartmentRoute = await import("../app/api/organization-department/route.ts");
+  learningDepartmentRoute = await import("../app/api/learning-department/route.ts");
+  teacherSupervisionRoute = await import("../app/api/teacher-supervision/route.ts");
 });
 
 after(() => {
@@ -235,6 +241,24 @@ test("API：state GET 五类账号均可读业务状态", async () => {
     assert.ok(Array.isArray(body.state.tasks));
     assert.ok(Array.isArray(body.state.subtasks));
   }
+});
+
+test("API：教师监管中心仅 teacher/admin 可读取全部活动", async () => {
+  for (const email of ["teacher@demo.local", "admin@demo.local"]) {
+    const res = await teacherSupervisionRoute.GET(requestFor(email, { path: "/api/teacher-supervision" }));
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.ok(Array.isArray(body.overview.activities));
+  }
+  for (const email of ["chair@demo.local", "leader@demo.local", "staff@demo.local"]) {
+    const res = await teacherSupervisionRoute.GET(requestFor(email, { path: "/api/teacher-supervision" }));
+    assert.equal(res.status, 403);
+  }
+});
+
+test("API：教师监管详情对不存在的活动返回 404", async () => {
+  const res = await teacherSupervisionRoute.GET(requestFor("teacher@demo.local", { path: "/api/teacher-supervision?activityId=missing" }));
+  assert.equal(res.status, 404);
 });
 
 test("办公室办事：申请创建、提交、受理和办结均持久化", async () => {
@@ -409,6 +433,7 @@ test("工作流：主席发布主任务并落库", async () => {
   const task = tasks.find((item) => item.id === 100);
   assert.ok(task, "主任务应已持久化");
   assert.equal(task.status, "待开始");
+  assert.equal(typeof task.assigneeAccountId, "number", "新任务应保存稳定的负责人账号编号");
 });
 
 test("工作流：干事开始→提交→主席审核通过，状态随库推进", async () => {
@@ -449,6 +474,7 @@ test("工作流：负责人拆分子任务→干事执行→负责人验收，�
   const created = (await taskStore.listAllSubtasks()).find((item) => item.parentTaskId === 101 && item.title === "集成测试子任务");
   assert.ok(created, "子任务应已持久化");
   assert.equal(created.status, "待开始");
+  assert.equal(typeof created.assigneeAccountId, "number", "新子任务应保存稳定的执行人账号编号");
 
   // 干事（执行人）开始
   res = await transitionRoute.POST(requestFor("staff@demo.local", { method: "POST", body: { kind: "subtask", id: created.id, action: "start" } }));
@@ -472,6 +498,21 @@ test("工作流：干事不能验收子任务（403，仅负责人可验收）",
   const subtask = (await taskStore.listAllSubtasks()).find((item) => item.title === "集成测试子任务");
   const res = await transitionRoute.POST(requestFor("staff@demo.local", { method: "POST", body: { kind: "subtask", id: subtask.id, action: "approve" } }));
   assert.equal(res.status, 403);
+});
+
+test("API：共享状态按账号范围裁剪任务", async () => {
+  const staffRes = await stateRoute.GET(requestFor("staff@demo.local", { path: "/api/state" }));
+  const staffBody = await staffRes.json();
+  assert.ok(staffBody.state.tasks.some((item) => item.id === 100));
+  assert.ok(staffBody.state.tasks.some((item) => item.id === 101));
+
+  const unrelatedRes = await stateRoute.GET(requestFor("learning@demo.local", { path: "/api/state" }));
+  const unrelatedBody = await unrelatedRes.json();
+  assert.equal(unrelatedBody.state.tasks.some((item) => item.id === 100 || item.id === 101), false);
+
+  const teacherRes = await stateRoute.GET(requestFor("teacher@demo.local", { path: "/api/state" }));
+  const teacherBody = await teacherRes.json();
+  assert.ok(teacherBody.state.tasks.some((item) => item.id === 100));
 });
 
 // ── 账号与通知端点（服务端越权）────────────────────────────
@@ -500,6 +541,17 @@ test("API：notifications POST 已登录可创建，未认证 401", async () => 
     const res = await notificationsRoute.POST(requestFor(user.email, { method: "POST", body: { recipientUsernames: ["staff"], title: "通知", detail: "内容" } }));
     assert.equal(res.status, 201, `${user.role} 应可创建通知`);
   }
+});
+
+test("API：共享状态只返回当前账号通知", async () => {
+  const staffRes = await stateRoute.GET(requestFor("staff@demo.local", { path: "/api/state" }));
+  const staffBody = await staffRes.json();
+  assert.ok(staffBody.state.notifications.length >= USERS.length);
+  assert.ok(staffBody.state.notifications.every((item) => item.recipientUsernames.includes("staff")));
+
+  const learningRes = await stateRoute.GET(requestFor("learning@demo.local", { path: "/api/state" }));
+  const learningBody = await learningRes.json();
+  assert.equal(learningBody.state.notifications.length, 0);
 });
 
 // ── 正式认证链路（密码登录 → 会话 → 登出）───────────────────
@@ -769,4 +821,31 @@ test("组织部：考核和外部事务完成闭环",async()=>{
   res=await organizationDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"assessment",id:cycleId,action:"submit"}}));assert.equal(res.status,200);res=await organizationDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"assessment",id:cycleId,action:"confirm"}}));assert.equal(res.status,200);body=await res.json();assert.equal(body.item.status,"已归档");
   res=await organizationDepartmentRoute.POST(requestFor("chair@demo.local",{method:"POST",path:"/api/organization-department",body:{kind:"affair",item:{category:"推优",title:"秋季推优材料报送",deadline:"2026-11-10",externalPlatform:"校团委平台"}}}));assert.equal(res.status,201);body=await res.json();const affairId=body.item.id;
   for(const [action,data] of [["start",{}],["submitResult",{result:"已在校团委平台提交",externalReference:"TW-2026-01"}],["confirm",{}],["archive",{}]]){res=await organizationDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/organization-department",body:{kind:"affair",id:affairId,action,data}}));assert.equal(res.status,200,`${action} 应成功`);body=await res.json()}assert.equal(body.item.status,"已归档");
+});
+
+test("学习部白卡：附件提交、新媒体领取、指定主席审核与两类退回形成闭环",async()=>{
+  await repo.prepare("INSERT INTO app_accounts (email,username,name,role,department,active) VALUES (?,?,?,?,?,1)").bind("chair2@demo.local","chair2","第二主席","chair","主席团").run();
+  const attachment={key:"tasks/white-card/example.xlsx",name:"白卡名单.xlsx",size:128,type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"};
+  let res=await learningDepartmentRoute.POST(requestFor("learning@demo.local",{method:"POST",path:"/api/learning-department",body:{attachments:[attachment]}}));
+  assert.equal(res.status,201);let body=await res.json();const id=body.item.id;assert.equal(body.item.status,"待新媒体领取");
+  res=await learningDepartmentRoute.PATCH(requestFor("media@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"claim"}}));assert.equal(res.status,200);
+  res=await learningDepartmentRoute.PATCH(requestFor("learning@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"withdraw"}}));assert.equal(res.status,409,"领取后不允许学习部撤回");
+  res=await learningDepartmentRoute.PATCH(requestFor("media@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"submitReview",articleUrl:"not-a-url",reviewerUsername:"chair2"}}));assert.equal(res.status,400);
+  res=await learningDepartmentRoute.PATCH(requestFor("media@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"submitReview",articleUrl:"https://mp.weixin.qq.com/s/example",reviewerUsername:"chair2"}}));assert.equal(res.status,200);
+  res=await learningDepartmentRoute.PATCH(requestFor("chair@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"approve"}}));assert.equal(res.status,403,"非指定主席不能审核");
+  res=await learningDepartmentRoute.PATCH(requestFor("chair2@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"returnMedia",note:"请调整推文标题"}}));assert.equal(res.status,200);body=await res.json();assert.equal(body.item.status,"新媒体制作中");
+  res=await learningDepartmentRoute.PATCH(requestFor("media@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"submitReview",articleUrl:"https://mp.weixin.qq.com/s/revised",reviewerUsername:"chair2"}}));assert.equal(res.status,200);
+  res=await learningDepartmentRoute.PATCH(requestFor("chair2@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"returnLearning",note:"原始名单需要修正"}}));assert.equal(res.status,200);body=await res.json();assert.equal(body.item.status,"待学习部修改");
+  res=await learningDepartmentRoute.PATCH(requestFor("learning@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"resubmit",attachments:[{...attachment,key:"tasks/white-card/revised.xlsx",name:"白卡名单修正版.xlsx"}]}}));assert.equal(res.status,200);
+  res=await learningDepartmentRoute.PATCH(requestFor("media@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"claim"}}));assert.equal(res.status,200);
+  res=await learningDepartmentRoute.PATCH(requestFor("media@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"submitReview",articleUrl:"https://mp.weixin.qq.com/s/final",reviewerUsername:"chair2"}}));assert.equal(res.status,200);
+  res=await learningDepartmentRoute.PATCH(requestFor("chair2@demo.local",{method:"PATCH",path:"/api/learning-department",body:{id,action:"approve"}}));assert.equal(res.status,200);body=await res.json();assert.equal(body.item.status,"已通过归档");
+  const snapshot=await learningDepartmentRoute.GET(requestFor("learning@demo.local",{path:"/api/learning-department"}));assert.equal(snapshot.status,200);body=await snapshot.json();assert.ok(body.events.filter((event)=>event.submissionId===id).length>=8);assert.ok(body.chairs.some((chair)=>chair.username==="chair2"));
+});
+
+test("学习部白卡：模板与权限校验",async()=>{
+  let res=await learningDepartmentRoute.GET(requestFor("learning@demo.local",{path:"/api/learning-department?template=1"}));assert.equal(res.status,200);assert.match(res.headers.get("content-type")||"",/spreadsheetml/);assert.ok((await res.arrayBuffer()).byteLength>500);
+  res=await learningDepartmentRoute.GET(requestFor("media@demo.local",{path:"/api/learning-department?template=1"}));assert.equal(res.status,403);
+  res=await learningDepartmentRoute.POST(requestFor("media@demo.local",{method:"POST",path:"/api/learning-department",body:{attachments:[{key:"x",name:"x"}]}}));assert.equal(res.status,403);
+  res=await learningDepartmentRoute.POST(requestFor("learning@demo.local",{method:"POST",path:"/api/learning-department",body:{attachments:[]}}));assert.equal(res.status,400);
 });

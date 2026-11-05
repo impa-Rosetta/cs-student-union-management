@@ -285,7 +285,12 @@ CREATE TABLE tasks (
   kind TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   fields_json TEXT NOT NULL DEFAULT '[]',
+  activity_id TEXT NOT NULL DEFAULT '',
+  assignee_account_id INTEGER,
+  owner_department_id INTEGER,
   activity_name TEXT,
+  planned_start_at TEXT NOT NULL DEFAULT '',
+  planned_end_at TEXT NOT NULL DEFAULT '',
   activity_time TEXT,
   activity_location TEXT,
   liaison_teacher TEXT,
@@ -295,6 +300,9 @@ CREATE TABLE tasks (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX idx_tasks_activity ON tasks (activity_id);
+CREATE INDEX idx_tasks_assignee_account ON tasks (assignee_account_id);
+CREATE INDEX idx_tasks_owner_department ON tasks (owner_department_id);
 
 CREATE TABLE subtasks (
   id TEXT PRIMARY KEY,
@@ -302,7 +310,10 @@ CREATE TABLE subtasks (
   parent TEXT NOT NULL DEFAULT '',
   title TEXT NOT NULL,
   assignee TEXT NOT NULL,
+  assignee_account_id INTEGER,
   deadline TEXT NOT NULL DEFAULT '',
+  planned_start_at TEXT NOT NULL DEFAULT '',
+  planned_end_at TEXT NOT NULL DEFAULT '',
   evidence TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL,
   completed_by TEXT,
@@ -313,6 +324,7 @@ CREATE TABLE subtasks (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_subtasks_parent ON subtasks (parent_task_id);
+CREATE INDEX idx_subtasks_assignee_account ON subtasks (assignee_account_id);
 
 CREATE TABLE organization_change_requests (id TEXT PRIMARY KEY,type TEXT NOT NULL,status TEXT NOT NULL,requester_username TEXT NOT NULL,requester_name TEXT NOT NULL,member_id INTEGER,member_name TEXT NOT NULL DEFAULT '',student_no TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',current_department TEXT NOT NULL DEFAULT '',current_position TEXT NOT NULL DEFAULT '',target_department TEXT NOT NULL DEFAULT '',target_position TEXT NOT NULL DEFAULT '',effective_date TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',handover TEXT NOT NULL DEFAULT '',attachments_json TEXT NOT NULL DEFAULT '[]',organization_opinion TEXT NOT NULL DEFAULT '',presidium_opinion TEXT NOT NULL DEFAULT '',synced_member_id INTEGER,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),effective_at TEXT NOT NULL DEFAULT '');
 CREATE INDEX idx_organization_changes_status ON organization_change_requests(status,updated_at);
@@ -323,3 +335,35 @@ CREATE TABLE organization_assessment_records (id SERIAL PRIMARY KEY,cycle_id TEX
 CREATE UNIQUE INDEX idx_organization_assessment_record_unique ON organization_assessment_records(cycle_id,member_id);
 CREATE TABLE organization_affairs (id TEXT PRIMARY KEY,category TEXT NOT NULL DEFAULT '',title TEXT NOT NULL,status TEXT NOT NULL,owner_name TEXT NOT NULL DEFAULT '',participant_names TEXT NOT NULL DEFAULT '',deadline TEXT NOT NULL DEFAULT '',external_platform TEXT NOT NULL DEFAULT '',external_reference TEXT NOT NULL DEFAULT '',materials TEXT NOT NULL DEFAULT '',result TEXT NOT NULL DEFAULT '',attachments_json TEXT NOT NULL DEFAULT '[]',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),archived_at TEXT NOT NULL DEFAULT '');
 CREATE INDEX idx_organization_affairs_status ON organization_affairs(status,deadline);
+
+CREATE TABLE white_card_submissions (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL,
+  submitter_username TEXT NOT NULL,
+  submitter_name TEXT NOT NULL,
+  attachments_json TEXT NOT NULL DEFAULT '[]',
+  handler_username TEXT NOT NULL DEFAULT '',
+  handler_name TEXT NOT NULL DEFAULT '',
+  article_url TEXT NOT NULL DEFAULT '',
+  reviewer_username TEXT NOT NULL DEFAULT '',
+  reviewer_name TEXT NOT NULL DEFAULT '',
+  return_target TEXT NOT NULL DEFAULT '',
+  return_reason TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  archived_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX idx_white_card_submissions_status ON white_card_submissions(status,updated_at);
+CREATE TABLE white_card_events (
+  id SERIAL PRIMARY KEY,
+  submission_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  from_status TEXT NOT NULL,
+  to_status TEXT NOT NULL,
+  actor_username TEXT NOT NULL,
+  actor_name TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_white_card_events_submission ON white_card_events(submission_id,id);
