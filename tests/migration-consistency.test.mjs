@@ -57,6 +57,7 @@ const EXPECTED = {
   tasks: ["id", "title", "department", "person", "deadline", "status", "risk", "kind", "description", "fields_json", "activity_id", "assignee_account_id", "owner_department_id", "activity_name", "planned_start_at", "planned_end_at", "activity_time", "activity_location", "liaison_teacher", "attachments_json", "control_mode", "last_action", "blocked", "blocked_reason", "reassignment_reason", "schedule_change_reason", "created_at", "updated_at"],
   subtasks: ["id", "parent_task_id", "parent", "title", "assignee", "assignee_account_id", "deadline", "planned_start_at", "planned_end_at", "evidence", "status", "completed_by", "completion_note", "attachments_json", "last_action", "blocked", "blocked_reason", "reassignment_reason", "schedule_change_reason", "created_at", "updated_at"],
   task_dependencies: ["id", "predecessor_task_id", "successor_task_id", "dependency_type", "created_by", "created_at"],
+  activity_templates: ["id", "name", "category", "description", "organizer", "departments_json", "needs_venue", "venue_request_json", "tasks_json", "created_by", "created_at"],
 };
 
 function stripBackticks(name) {

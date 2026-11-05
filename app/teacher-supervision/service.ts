@@ -134,7 +134,7 @@ function makeTaskNode(task: TaskLike, children: SupervisionNode[], now: Date): S
 }
 
 function makeServiceNode(item: WorkItem, now: Date): SupervisionNode {
-  const entity = { status: item.nativeStatus, plannedEndAt: item.dueAt, plannedStartAt: item.plannedStartAt };
+  const entity = { status: item.nativeStatus, plannedEndAt: item.dueAt, plannedStartAt: item.plannedStartAt, risk: item.blocked };
   return {
     id: item.id, entityType: "service", title: item.title, department: item.ownerDepartmentName,
     assignee: item.assigneeName || item.requesterName, status: item.nativeStatus,
@@ -152,15 +152,27 @@ function leafNodes(nodes: SupervisionNode[]): SupervisionNode[] {
 function summarize(nodes: SupervisionNode[]): ActivitySupervisionSummary {
   const leaves = leafNodes(nodes);
   const completedLeafCount = leaves.filter((node) => node.progress === 100).length;
+  const overdueCount = leaves.filter((node) => node.scheduleState === "overdue").length;
+  const blockedCount = leaves.filter((node) => node.scheduleState === "risk").length;
+  const dueSoonCount = leaves.filter((node) => node.scheduleState === "due-soon").length;
+  const unscheduledCount = leaves.filter((node) => node.scheduleState === "unscheduled").length;
+  const healthReasons = [
+    blockedCount ? `${blockedCount}项工作被标记为阻塞` : "",
+    overdueCount ? `${overdueCount}项工作已逾期` : "",
+    dueSoonCount ? `${dueSoonCount}项工作将在七日内到期` : "",
+    unscheduledCount ? `${unscheduledCount}项工作未设置计划日期` : "",
+  ].filter(Boolean);
   return {
     taskCount: nodes.length,
     subtaskCount: nodes.reduce((sum, node) => sum + node.children.length, 0),
     leafCount: leaves.length,
     completedLeafCount,
     progress: leaves.length ? Math.round(leaves.reduce((sum, node) => sum + node.progress, 0) / leaves.length) : 0,
-    overdueCount: leaves.filter((node) => node.scheduleState === "overdue").length,
-    dueSoonCount: leaves.filter((node) => node.scheduleState === "due-soon").length,
-    unscheduledCount: leaves.filter((node) => node.scheduleState === "unscheduled").length,
+    overdueCount,
+    dueSoonCount,
+    unscheduledCount,
+    health: blockedCount || overdueCount ? "risk" : dueSoonCount || unscheduledCount ? "attention" : "normal",
+    healthReasons,
   };
 }
 
@@ -262,8 +274,10 @@ export function buildSupervisionOverview(
       dueSoonCount: detail.summary.dueSoonCount,
       unscheduledCount: detail.summary.unscheduledCount,
       nextDeadline: futureEnds[0] || "",
+      health: detail.summary.health,
+      healthReasons: detail.summary.healthReasons,
     };
-  }).sort((a, b) => b.overdueCount - a.overdueCount || (dateMs(a.nextDeadline) || Number.MAX_SAFE_INTEGER) - (dateMs(b.nextDeadline) || Number.MAX_SAFE_INTEGER));
+  }).sort((a, b) => ({ risk: 2, attention: 1, normal: 0 }[b.health] - { risk: 2, attention: 1, normal: 0 }[a.health]) || b.overdueCount - a.overdueCount || (dateMs(a.nextDeadline) || Number.MAX_SAFE_INTEGER) - (dateMs(b.nextDeadline) || Number.MAX_SAFE_INTEGER));
   return {
     stats: {
       activityCount: cards.length,

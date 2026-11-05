@@ -577,7 +577,15 @@ export default function Home() {
         venueRequest: { purposeCategory: data.venuePurpose || "学生组织活动", usageDate: data.venueDate || "", startTime: data.venueStart || "", endTime: data.venueEnd || "", attendeeCount: Number(data.venueAttendees || 0), roomTypes: data.venueRoomTypes.split(/[、,，]/).map(item => item.trim()).filter(Boolean), equipment: data.venueEquipment.split(/[、,，]/).map(item => item.trim()).filter(Boolean), preferredLocation: data.venuePreferredLocation || data.location || "", notes: data.venueNotes || "" },
       };
       setActivities((current) => editingActivity ? current.map((item) => item.id === editingActivity.id ? next : item) : [next, ...current]);
-      void fetch("/api/activities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activity: next }) }).catch(() => undefined);
+      const activityResponse = await fetch("/api/activities", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activity: next }) });
+      if (activityResponse.ok && !editingActivity && data.templateId) {
+        const templateResponse = await fetch("/api/activity-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "instantiate", templateId: Number(data.templateId), activityId: next.id }) });
+        if (templateResponse.ok) {
+          const refreshed = await fetch("/api/state").then((response) => response.json());
+          if (Array.isArray(refreshed?.state?.tasks)) setTasks(refreshed.state.tasks);
+          if (Array.isArray(refreshed?.state?.subtasks)) setSubtasks(refreshed.state.subtasks);
+        }
+      }
       const participantLeaders = departments.flatMap((department) => resolveUsernames({ roles: ["leader"], department }));
       const teacherAccounts = next.teacher === "未指定" ? [] : resolveUsernames({ names: [next.teacher] });
       pushNotification({ recipientUsernames: Array.from(new Set([...participantLeaders, ...teacherAccounts])), title: editingActivity ? "活动信息已更新" : "新增活动安排", detail: `${next.name}：${next.date} ${next.time}，地点${next.location}。`, level: editingActivity ? "info" : "warning", entity: { type: "activity", id: next.id } });

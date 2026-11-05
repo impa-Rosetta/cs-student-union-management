@@ -324,6 +324,15 @@ export const taskDependencies = sqliteTable("task_dependencies", {
   index("idx_task_dependencies_successor").on(table.successorTaskId),
 ]);
 
+export const activityTemplates = sqliteTable("activity_templates", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(), category: text("category").notNull().default(""),
+  description: text("description").notNull().default(""), organizer: text("organizer").notNull().default(""),
+  departmentsJson: text("departments_json").notNull().default("[]"), needsVenue: integer("needs_venue", { mode: "boolean" }).notNull().default(false),
+  venueRequestJson: text("venue_request_json").notNull().default("{}"), tasksJson: text("tasks_json").notNull().default("[]"),
+  createdBy: text("created_by").notNull().default(""), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const whiteCardSubmissions = sqliteTable("white_card_submissions", {
   id: text("id").primaryKey(),
   title: text("title").notNull(),

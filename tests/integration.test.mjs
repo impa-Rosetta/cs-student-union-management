@@ -46,6 +46,7 @@ let teacherSupervisionRoute;
 let workItemsRoute;
 let taskDependenciesRoute;
 let workControlsRoute;
+let activityTemplatesRoute;
 
 const USERS = [
   { email: "admin@demo.local", username: "admin", name: "管理员", role: "admin", department: "系统管理" },
@@ -147,6 +148,7 @@ before(async () => {
   workItemsRoute = await import("../app/api/work-items/route.ts");
   taskDependenciesRoute = await import("../app/api/task-dependencies/route.ts");
   workControlsRoute = await import("../app/api/work-controls/route.ts");
+  activityTemplatesRoute = await import("../app/api/activity-templates/route.ts");
 });
 
 after(() => {
@@ -742,6 +744,30 @@ test("API：活动阶段流转写入审计并通知下一处理人", async () =>
   const state = await stateRoute.GET(requestFor("leader@demo.local", { path: "/api/state" }));
   const storedNotifications = (await state.json()).state.notifications;
   assert.ok(storedNotifications.some((item) => item.entity?.type === "activity" && item.entity.id === id && item.recipientUsernames.includes("leader")));
+});
+
+test("活动模板：保存任务分解并按新活动日期重新生成", async () => {
+  const sourceId = `template-source-${Date.now()}`;
+  let res = await activitiesRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { activity: { id: sourceId, name: "模板来源活动", category: "科技竞赛", date: "2026年11月20日", organizer: "科创中心", departments: ["科创中心"], description: "标准竞赛流程" } } }));
+  assert.equal(res.status, 200);
+  res = await transitionRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { kind: "task", action: "create", task: { id: 130, title: "完成赛前环境检查", department: "科创中心", person: "负责人", activityId: sourceId, activityName: "模板来源活动", plannedStartAt: "2026-11-18T09:00", plannedEndAt: "2026-11-19T18:00", deadline: "2026-11-19T18:00" } } }));
+  assert.equal(res.status, 200);
+
+  res = await activityTemplatesRoute.POST(requestFor("chair@demo.local", { method: "POST", path: "/api/activity-templates", body: { action: "capture", activityId: sourceId, name: "竞赛标准模板" } }));
+  assert.equal(res.status, 201);
+  const template = (await res.json()).template;
+  assert.equal(template.tasks.length, 1);
+
+  const targetId = `template-target-${Date.now()}`;
+  res = await activitiesRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { activity: { id: targetId, name: "新一届竞赛", date: "2026年12月20日", organizer: "科创中心", departments: ["科创中心"] } } }));
+  assert.equal(res.status, 200);
+  res = await activityTemplatesRoute.POST(requestFor("chair@demo.local", { method: "POST", path: "/api/activity-templates", body: { action: "instantiate", activityId: targetId, templateId: template.id } }));
+  assert.equal(res.status, 201);
+  const generated = (await taskStore.listAllTasks()).find((item) => item.activityId === targetId && item.title === "完成赛前环境检查");
+  assert.ok(generated);
+  assert.equal(generated.department, "科创中心");
+  assert.match(generated.plannedEndAt, /^2026-12-19/);
+  assert.equal(typeof generated.assigneeAccountId, "number");
 });
 
 test("API：archive POST 仅 admin/chair/leader，其余 403", async () => {

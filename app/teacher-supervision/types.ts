@@ -44,6 +44,8 @@ export type ActivitySupervisionSummary = {
   overdueCount: number;
   dueSoonCount: number;
   unscheduledCount: number;
+  health: "normal" | "attention" | "risk";
+  healthReasons: string[];
 };
 
 export type ActivitySupervisionDetail = {
@@ -72,6 +74,8 @@ export type ActivitySupervisionCard = {
   dueSoonCount: number;
   unscheduledCount: number;
   nextDeadline: string;
+  health: "normal" | "attention" | "risk";
+  healthReasons: string[];
 };
 
 export type SupervisionOverview = {

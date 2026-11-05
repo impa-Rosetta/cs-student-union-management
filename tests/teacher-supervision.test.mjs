@@ -35,6 +35,8 @@ test("activity supervision builds WBS, leaf progress, overdue state and filtered
   assert.equal(detail.summary.completedLeafCount, 1);
   assert.equal(detail.summary.progress, 50);
   assert.equal(detail.summary.overdueCount, 1);
+  assert.equal(detail.summary.health, "risk");
+  assert.match(detail.summary.healthReasons.join("；"), /逾期/);
   assert.equal(detail.tasks[0].children.length, 2);
   assert.equal(detail.tasks[1].scheduleState, "overdue");
   assert.deepEqual(detail.events.map((event) => event.id), [2, 1]);
@@ -47,6 +49,7 @@ test("overview includes every activity and rolls up real task progress", () => {
   assert.equal(overview.activities.length, 2);
   assert.equal(overview.activities.find((item) => item.id === "activity-1").progress, 50);
   assert.equal(overview.activities.find((item) => item.id === "activity-2").progress, 100);
+  assert.equal(overview.activities.find((item) => item.id === "activity-2").health, "normal");
   assert.equal(overview.stats.activityCount, 2);
   assert.equal(overview.stats.overdueTaskCount, 1);
 });
