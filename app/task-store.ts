@@ -32,6 +32,10 @@ interface TaskRow {
   attachments_json: string;
   control_mode: string | null;
   last_action: string | null;
+  blocked: number;
+  blocked_reason: string;
+  reassignment_reason: string;
+  schedule_change_reason: string;
 }
 
 interface SubtaskRow {
@@ -50,6 +54,10 @@ interface SubtaskRow {
   completion_note: string | null;
   attachments_json: string;
   last_action: string | null;
+  blocked: number;
+  blocked_reason: string;
+  reassignment_reason: string;
+  schedule_change_reason: string;
 }
 
 function safeParse<T>(json: string | null | undefined, fallback: T): T {
@@ -90,6 +98,10 @@ async function prepareTaskSchema() {
       attachments_json TEXT NOT NULL DEFAULT '[]',
       control_mode TEXT,
       last_action TEXT,
+      blocked INTEGER NOT NULL DEFAULT 0,
+      blocked_reason TEXT NOT NULL DEFAULT '',
+      reassignment_reason TEXT NOT NULL DEFAULT '',
+      schedule_change_reason TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
@@ -109,6 +121,10 @@ async function prepareTaskSchema() {
       completion_note TEXT,
       attachments_json TEXT NOT NULL DEFAULT '[]',
       last_action TEXT,
+      blocked INTEGER NOT NULL DEFAULT 0,
+      blocked_reason TEXT NOT NULL DEFAULT '',
+      reassignment_reason TEXT NOT NULL DEFAULT '',
+      schedule_change_reason TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
@@ -120,11 +136,19 @@ async function prepareTaskSchema() {
   if (!taskColumns.results.some((column) => column.name === "planned_end_at")) await db.prepare("ALTER TABLE tasks ADD COLUMN planned_end_at TEXT NOT NULL DEFAULT ''").run();
   if (!taskColumns.results.some((column) => column.name === "assignee_account_id")) await db.prepare("ALTER TABLE tasks ADD COLUMN assignee_account_id INTEGER").run();
   if (!taskColumns.results.some((column) => column.name === "owner_department_id")) await db.prepare("ALTER TABLE tasks ADD COLUMN owner_department_id INTEGER").run();
+  if (!taskColumns.results.some((column) => column.name === "blocked")) await db.prepare("ALTER TABLE tasks ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0").run();
+  if (!taskColumns.results.some((column) => column.name === "blocked_reason")) await db.prepare("ALTER TABLE tasks ADD COLUMN blocked_reason TEXT NOT NULL DEFAULT ''").run();
+  if (!taskColumns.results.some((column) => column.name === "reassignment_reason")) await db.prepare("ALTER TABLE tasks ADD COLUMN reassignment_reason TEXT NOT NULL DEFAULT ''").run();
+  if (!taskColumns.results.some((column) => column.name === "schedule_change_reason")) await db.prepare("ALTER TABLE tasks ADD COLUMN schedule_change_reason TEXT NOT NULL DEFAULT ''").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_tasks_activity ON tasks(activity_id)").run();
   const subtaskColumns = await db.prepare("PRAGMA table_info(subtasks)").all<{ name: string }>();
   if (!subtaskColumns.results.some((column) => column.name === "planned_start_at")) await db.prepare("ALTER TABLE subtasks ADD COLUMN planned_start_at TEXT NOT NULL DEFAULT ''").run();
   if (!subtaskColumns.results.some((column) => column.name === "planned_end_at")) await db.prepare("ALTER TABLE subtasks ADD COLUMN planned_end_at TEXT NOT NULL DEFAULT ''").run();
   if (!subtaskColumns.results.some((column) => column.name === "assignee_account_id")) await db.prepare("ALTER TABLE subtasks ADD COLUMN assignee_account_id INTEGER").run();
+  if (!subtaskColumns.results.some((column) => column.name === "blocked")) await db.prepare("ALTER TABLE subtasks ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0").run();
+  if (!subtaskColumns.results.some((column) => column.name === "blocked_reason")) await db.prepare("ALTER TABLE subtasks ADD COLUMN blocked_reason TEXT NOT NULL DEFAULT ''").run();
+  if (!subtaskColumns.results.some((column) => column.name === "reassignment_reason")) await db.prepare("ALTER TABLE subtasks ADD COLUMN reassignment_reason TEXT NOT NULL DEFAULT ''").run();
+  if (!subtaskColumns.results.some((column) => column.name === "schedule_change_reason")) await db.prepare("ALTER TABLE subtasks ADD COLUMN schedule_change_reason TEXT NOT NULL DEFAULT ''").run();
   await db.batch([
     db.prepare("CREATE INDEX IF NOT EXISTS idx_tasks_assignee_account ON tasks(assignee_account_id)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_tasks_owner_department ON tasks(owner_department_id)"),
@@ -193,6 +217,10 @@ function rowToTask(row: TaskRow): TaskEntity {
     ownerDepartmentId: row.owner_department_id ?? undefined,
     plannedStartAt: row.planned_start_at,
     plannedEndAt: row.planned_end_at,
+    blocked: Boolean(row.blocked),
+    blockedReason: row.blocked_reason,
+    reassignmentReason: row.reassignment_reason,
+    scheduleChangeReason: row.schedule_change_reason,
   };
   setIfPresent(task, "activityName", row.activity_name);
   setIfPresent(task, "activityTime", row.activity_time);
@@ -217,6 +245,10 @@ function rowToSubtask(row: SubtaskRow): SubtaskEntity {
     plannedStartAt: row.planned_start_at,
     plannedEndAt: row.planned_end_at,
     assigneeAccountId: row.assignee_account_id ?? undefined,
+    blocked: Boolean(row.blocked),
+    blockedReason: row.blocked_reason,
+    reassignmentReason: row.reassignment_reason,
+    scheduleChangeReason: row.schedule_change_reason,
   };
   setIfPresent(subtask, "completedBy", row.completed_by);
   setIfPresent(subtask, "completionNote", row.completion_note);
@@ -264,9 +296,9 @@ export async function upsertTasks(tasks: TaskEntity[]): Promise<void> {
   const statements = ownership.tasks.map((task) => {
     const fieldsJson = JSON.stringify(task.fields ?? []);
     const attachmentsJson = JSON.stringify(task.attachments ?? []);
-    return db.prepare(`INSERT INTO tasks (id, title, department, person, deadline, status, risk, kind, description, fields_json, activity_id, assignee_account_id, owner_department_id, activity_name, planned_start_at, planned_end_at, activity_time, activity_location, liaison_teacher, attachments_json, control_mode, last_action, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET title=excluded.title, department=excluded.department, person=excluded.person, deadline=excluded.deadline, status=excluded.status, risk=excluded.risk, kind=excluded.kind, description=excluded.description, fields_json=excluded.fields_json, activity_id=excluded.activity_id, assignee_account_id=excluded.assignee_account_id, owner_department_id=excluded.owner_department_id, activity_name=excluded.activity_name, planned_start_at=excluded.planned_start_at, planned_end_at=excluded.planned_end_at, activity_time=excluded.activity_time, activity_location=excluded.activity_location, liaison_teacher=excluded.liaison_teacher, attachments_json=excluded.attachments_json, control_mode=excluded.control_mode, last_action=excluded.last_action, updated_at=CURRENT_TIMESTAMP`)
+    return db.prepare(`INSERT INTO tasks (id, title, department, person, deadline, status, risk, kind, description, fields_json, activity_id, assignee_account_id, owner_department_id, activity_name, planned_start_at, planned_end_at, activity_time, activity_location, liaison_teacher, attachments_json, control_mode, last_action, blocked, blocked_reason, reassignment_reason, schedule_change_reason, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET title=excluded.title, department=excluded.department, person=excluded.person, deadline=excluded.deadline, status=excluded.status, risk=excluded.risk, kind=excluded.kind, description=excluded.description, fields_json=excluded.fields_json, activity_id=excluded.activity_id, assignee_account_id=excluded.assignee_account_id, owner_department_id=excluded.owner_department_id, activity_name=excluded.activity_name, planned_start_at=excluded.planned_start_at, planned_end_at=excluded.planned_end_at, activity_time=excluded.activity_time, activity_location=excluded.activity_location, liaison_teacher=excluded.liaison_teacher, attachments_json=excluded.attachments_json, control_mode=excluded.control_mode, last_action=excluded.last_action, blocked=excluded.blocked, blocked_reason=excluded.blocked_reason, reassignment_reason=excluded.reassignment_reason, schedule_change_reason=excluded.schedule_change_reason, updated_at=CURRENT_TIMESTAMP`)
       .bind(
         task.id,
         String(task.title ?? ""),
@@ -290,6 +322,10 @@ export async function upsertTasks(tasks: TaskEntity[]): Promise<void> {
         attachmentsJson,
         task.controlMode != null ? String(task.controlMode) : null,
         task.lastAction != null ? String(task.lastAction) : null,
+        task.blocked ? 1 : 0,
+        String(task.blockedReason ?? ""),
+        String(task.reassignmentReason ?? ""),
+        String(task.scheduleChangeReason ?? ""),
       );
   });
   await db.batch(statements);
@@ -301,9 +337,9 @@ export async function upsertSubtasks(subtasks: SubtaskEntity[]): Promise<void> {
   const ownership = await resolveOwnership([], subtasks);
   const statements = ownership.subtasks.map((subtask) => {
     const attachmentsJson = JSON.stringify(subtask.attachments ?? []);
-    return db.prepare(`INSERT INTO subtasks (id, parent_task_id, parent, title, assignee, assignee_account_id, deadline, planned_start_at, planned_end_at, evidence, status, completed_by, completion_note, attachments_json, last_action, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(id) DO UPDATE SET parent_task_id=excluded.parent_task_id, parent=excluded.parent, title=excluded.title, assignee=excluded.assignee, assignee_account_id=excluded.assignee_account_id, deadline=excluded.deadline, planned_start_at=excluded.planned_start_at, planned_end_at=excluded.planned_end_at, evidence=excluded.evidence, status=excluded.status, completed_by=excluded.completed_by, completion_note=excluded.completion_note, attachments_json=excluded.attachments_json, last_action=excluded.last_action, updated_at=CURRENT_TIMESTAMP`)
+    return db.prepare(`INSERT INTO subtasks (id, parent_task_id, parent, title, assignee, assignee_account_id, deadline, planned_start_at, planned_end_at, evidence, status, completed_by, completion_note, attachments_json, last_action, blocked, blocked_reason, reassignment_reason, schedule_change_reason, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(id) DO UPDATE SET parent_task_id=excluded.parent_task_id, parent=excluded.parent, title=excluded.title, assignee=excluded.assignee, assignee_account_id=excluded.assignee_account_id, deadline=excluded.deadline, planned_start_at=excluded.planned_start_at, planned_end_at=excluded.planned_end_at, evidence=excluded.evidence, status=excluded.status, completed_by=excluded.completed_by, completion_note=excluded.completion_note, attachments_json=excluded.attachments_json, last_action=excluded.last_action, blocked=excluded.blocked, blocked_reason=excluded.blocked_reason, reassignment_reason=excluded.reassignment_reason, schedule_change_reason=excluded.schedule_change_reason, updated_at=CURRENT_TIMESTAMP`)
       .bind(
         subtask.id,
         subtask.parentTaskId != null ? Number(subtask.parentTaskId) : null,
@@ -320,6 +356,10 @@ export async function upsertSubtasks(subtasks: SubtaskEntity[]): Promise<void> {
         subtask.completionNote != null ? String(subtask.completionNote) : null,
         attachmentsJson,
         subtask.lastAction != null ? String(subtask.lastAction) : null,
+        subtask.blocked ? 1 : 0,
+        String(subtask.blockedReason ?? ""),
+        String(subtask.reassignmentReason ?? ""),
+        String(subtask.scheduleChangeReason ?? ""),
       );
   });
   await db.batch(statements);

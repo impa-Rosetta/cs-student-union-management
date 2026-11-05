@@ -9,13 +9,15 @@ import { listActivities } from "../../activity-store.ts";
 import { listArchiveRecords } from "../../archive-store.ts";
 import { applyCalculatedActivityProgress } from "../../work-management/activity-progress.ts";
 import { scopeSharedState } from "../../work-management/scope.ts";
+import { listActivityServiceWorkItems } from "../../work-management/store.ts";
 
 export async function GET(request: Request) {
   try {
     const auth = await requireRole(request);
     const tasks = await listAllTasks();
     const subtasks = await listAllSubtasks();
-    const activities = applyCalculatedActivityProgress(await listActivities(), tasks, subtasks);
+    const services = await listActivityServiceWorkItems();
+    const activities = applyCalculatedActivityProgress(await listActivities(), tasks, subtasks, services);
     const state = scopeSharedState({
       tasks,
       subtasks,

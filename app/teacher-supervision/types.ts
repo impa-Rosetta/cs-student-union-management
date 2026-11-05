@@ -4,7 +4,7 @@ export type SupervisionAttachment = { key: string; name: string; size?: number; 
 
 export type SupervisionNode = {
   id: string | number;
-  entityType: "activity" | "task" | "subtask";
+  entityType: "activity" | "task" | "subtask" | "service";
   title: string;
   department: string;
   assignee: string;

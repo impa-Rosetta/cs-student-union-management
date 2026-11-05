@@ -297,6 +297,10 @@ CREATE TABLE tasks (
   attachments_json TEXT NOT NULL DEFAULT '[]',
   control_mode TEXT,
   last_action TEXT,
+  blocked BOOLEAN NOT NULL DEFAULT FALSE,
+  blocked_reason TEXT NOT NULL DEFAULT '',
+  reassignment_reason TEXT NOT NULL DEFAULT '',
+  schedule_change_reason TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -320,11 +324,27 @@ CREATE TABLE subtasks (
   completion_note TEXT,
   attachments_json TEXT NOT NULL DEFAULT '[]',
   last_action TEXT,
+  blocked BOOLEAN NOT NULL DEFAULT FALSE,
+  blocked_reason TEXT NOT NULL DEFAULT '',
+  reassignment_reason TEXT NOT NULL DEFAULT '',
+  schedule_change_reason TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_subtasks_parent ON subtasks (parent_task_id);
 CREATE INDEX idx_subtasks_assignee_account ON subtasks (assignee_account_id);
+
+CREATE TABLE task_dependencies (
+  id SERIAL PRIMARY KEY,
+  predecessor_task_id INTEGER NOT NULL,
+  successor_task_id INTEGER NOT NULL,
+  dependency_type TEXT NOT NULL DEFAULT 'finish_to_start',
+  created_by TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(predecessor_task_id, successor_task_id)
+);
+CREATE UNIQUE INDEX idx_task_dependencies_pair ON task_dependencies (predecessor_task_id, successor_task_id);
+CREATE INDEX idx_task_dependencies_successor ON task_dependencies (successor_task_id);
 
 CREATE TABLE organization_change_requests (id TEXT PRIMARY KEY,type TEXT NOT NULL,status TEXT NOT NULL,requester_username TEXT NOT NULL,requester_name TEXT NOT NULL,member_id INTEGER,member_name TEXT NOT NULL DEFAULT '',student_no TEXT NOT NULL DEFAULT '',phone TEXT NOT NULL DEFAULT '',current_department TEXT NOT NULL DEFAULT '',current_position TEXT NOT NULL DEFAULT '',target_department TEXT NOT NULL DEFAULT '',target_position TEXT NOT NULL DEFAULT '',effective_date TEXT NOT NULL DEFAULT '',reason TEXT NOT NULL DEFAULT '',handover TEXT NOT NULL DEFAULT '',attachments_json TEXT NOT NULL DEFAULT '[]',organization_opinion TEXT NOT NULL DEFAULT '',presidium_opinion TEXT NOT NULL DEFAULT '',synced_member_id INTEGER,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),effective_at TEXT NOT NULL DEFAULT '');
 CREATE INDEX idx_organization_changes_status ON organization_change_requests(status,updated_at);

@@ -60,3 +60,18 @@ test("legacy task name fallback only links when activity name is unique", () => 
   assert.equal(ambiguous.tasks.some((item) => item.id === 9), false);
 });
 
+test("linked department service appears as an activity execution item", () => {
+  const service = {
+    id: "venue_request:v1", sourceType: "venue_request", sourceId: "v1", title: "迎新晚会教室借用",
+    statusGroup: "done", nativeStatus: "借用成功", activityId: "activity-1", activityName: "迎新晚会",
+    ownerDepartmentName: "办公室", assigneeName: "办公室干事", requesterUsername: "arts", requesterName: "文艺部负责人",
+    priority: "普通", plannedStartAt: "", dueAt: "2026-11-09T18:00:00+08:00", completedAt: "", blocked: false,
+    blockedReason: "", nextActorType: "", nextActorId: "", createdAt: "", updatedAt: "",
+  };
+  const detail = buildActivitySupervision(activities[0], activities, tasks, subtasks, events, new Date("2026-11-05T12:00:00+08:00"), [service]);
+  assert.equal(detail.tasks.some((item) => item.entityType === "service" && item.id === service.id), true);
+  assert.equal(detail.summary.taskCount, 3);
+  assert.equal(detail.summary.leafCount, 4);
+  assert.equal(detail.summary.progress, 63);
+});
+

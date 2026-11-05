@@ -9,6 +9,7 @@ import { resolveNotification, type NotificationRecord } from "../../../workflow/
 import { recordWorkflowEvent } from "../../../workflow-events.ts";
 import { changedById, listAllSubtasks, listAllTasks, upsertSubtasks, upsertTasks, type SubtaskEntity, type TaskEntity } from "../../../task-store.ts";
 import { insertNotifications } from "../../../notification-store.ts";
+import { listIncompletePredecessors } from "../../../task-dependency-store.ts";
 import type {
   WorkflowActor,
   WorkflowAttachment,
@@ -48,6 +49,23 @@ export async function POST(request: Request) {
     const subtasks = (await listAllSubtasks()) as unknown as WorkflowSubtask[];
 
     const actor: WorkflowActor = { role: auth.user.role, name: auth.user.name, department: auth.user.department };
+
+    if (body.kind === "task" && body.id !== undefined && body.action === "start") {
+      const current = tasks.find((task) => Number(task.id) === Number(body.id));
+      if (current?.blocked) {
+        return Response.json({ error: `任务当前处于阻塞状态：${current.blockedReason || "请先解除阻塞"}` }, { status: 409 });
+      }
+      const incomplete = await listIncompletePredecessors(Number(body.id));
+      if (incomplete.length > 0) {
+        return Response.json({ error: `前置任务尚未完成：${incomplete.map((item) => item.title).join("、")}` }, { status: 409 });
+      }
+    }
+    if (body.kind === "subtask" && body.id !== undefined && body.action === "start") {
+      const current = subtasks.find((subtask) => String(subtask.id) === String(body.id));
+      if (current?.blocked) {
+        return Response.json({ error: `子任务当前处于阻塞状态：${current.blockedReason || "请先解除阻塞"}` }, { status: 409 });
+      }
+    }
 
     let result: WorkflowMutationResult;
     if (body.kind === "task" && body.action === "create") {

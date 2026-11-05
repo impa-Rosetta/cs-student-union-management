@@ -44,6 +44,8 @@ let organizationDepartmentRoute;
 let learningDepartmentRoute;
 let teacherSupervisionRoute;
 let workItemsRoute;
+let taskDependenciesRoute;
+let workControlsRoute;
 
 const USERS = [
   { email: "admin@demo.local", username: "admin", name: "管理员", role: "admin", department: "系统管理" },
@@ -143,6 +145,8 @@ before(async () => {
   learningDepartmentRoute = await import("../app/api/learning-department/route.ts");
   teacherSupervisionRoute = await import("../app/api/teacher-supervision/route.ts");
   workItemsRoute = await import("../app/api/work-items/route.ts");
+  taskDependenciesRoute = await import("../app/api/task-dependencies/route.ts");
+  workControlsRoute = await import("../app/api/work-controls/route.ts");
 });
 
 after(() => {
@@ -500,6 +504,58 @@ test("工作流：干事不能验收子任务（403，仅负责人可验收）",
   const subtask = (await taskStore.listAllSubtasks()).find((item) => item.title === "集成测试子任务");
   const res = await transitionRoute.POST(requestFor("staff@demo.local", { method: "POST", body: { kind: "subtask", id: subtask.id, action: "approve" } }));
   assert.equal(res.status, 403);
+});
+
+test("工作流：前置任务未完成时后续任务不能开始，完成后解除门禁", async () => {
+  for (const task of [
+    { id: 110, title: "完成场地确认", department: "科创中心", person: "干事" },
+    { id: 111, title: "发布活动通知", department: "科创中心", person: "干事" },
+  ]) {
+    const created = await transitionRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { kind: "task", action: "create", task } }));
+    assert.equal(created.status, 200);
+  }
+
+  let res = await taskDependenciesRoute.POST(requestFor("chair@demo.local", {
+    method: "POST", path: "/api/task-dependencies", body: { predecessorTaskId: 110, successorTaskId: 111 },
+  }));
+  assert.equal(res.status, 201);
+
+  res = await transitionRoute.POST(requestFor("staff@demo.local", { method: "POST", body: { kind: "task", id: 111, action: "start" } }));
+  assert.equal(res.status, 409);
+  assert.match((await res.json()).error, /完成场地确认/);
+
+  for (const [email, action] of [["staff@demo.local", "start"], ["staff@demo.local", "submit"], ["chair@demo.local", "approve"]]) {
+    res = await transitionRoute.POST(requestFor(email, { method: "POST", body: { kind: "task", id: 110, action } }));
+    assert.equal(res.status, 200);
+  }
+  res = await transitionRoute.POST(requestFor("staff@demo.local", { method: "POST", body: { kind: "task", id: 111, action: "start" } }));
+  assert.equal(res.status, 200);
+});
+
+test("工作流：阻塞、解除阻塞、改派和延期均强制记录原因", async () => {
+  let res = await transitionRoute.POST(requestFor("chair@demo.local", { method: "POST", body: { kind: "task", action: "create", task: { id: 112, title: "准备技术物料", department: "科创中心", person: "干事" } } }));
+  assert.equal(res.status, 200);
+
+  res = await workControlsRoute.PATCH(requestFor("staff@demo.local", { method: "PATCH", path: "/api/work-controls", body: { kind: "task", id: 112, action: "block" } }));
+  assert.equal(res.status, 400);
+  res = await workControlsRoute.PATCH(requestFor("staff@demo.local", { method: "PATCH", path: "/api/work-controls", body: { kind: "task", id: 112, action: "block", reason: "设备尚未送达" } }));
+  assert.equal(res.status, 200);
+  res = await transitionRoute.POST(requestFor("staff@demo.local", { method: "POST", body: { kind: "task", id: 112, action: "start" } }));
+  assert.equal(res.status, 409);
+
+  res = await workControlsRoute.PATCH(requestFor("staff@demo.local", { method: "PATCH", path: "/api/work-controls", body: { kind: "task", id: 112, action: "unblock", reason: "设备已到货" } }));
+  assert.equal(res.status, 200);
+  res = await workControlsRoute.PATCH(requestFor("chair@demo.local", { method: "PATCH", path: "/api/work-controls", body: { kind: "task", id: 112, action: "reschedule", plannedEndAt: "2026-11-20", reason: "活动日期调整" } }));
+  assert.equal(res.status, 200);
+  res = await workControlsRoute.PATCH(requestFor("chair@demo.local", { method: "PATCH", path: "/api/work-controls", body: { kind: "task", id: 112, action: "reassign", assignee: "负责人", reason: "改由负责人统筹" } }));
+  assert.equal(res.status, 200);
+
+  const task = (await taskStore.listAllTasks()).find((item) => item.id === 112);
+  assert.equal(task.blocked, false);
+  assert.equal(task.plannedEndAt, "2026-11-20");
+  assert.equal(task.scheduleChangeReason, "活动日期调整");
+  assert.equal(task.person, "负责人");
+  assert.equal(task.reassignmentReason, "改由负责人统筹");
 });
 
 test("API：共享状态按账号范围裁剪任务", async () => {

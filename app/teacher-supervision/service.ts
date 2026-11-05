@@ -8,6 +8,7 @@ import type {
 } from "./types.ts";
 import { workProgressScore } from "../work-management/activity-progress.ts";
 import { toUnifiedWorkStatus } from "../work-management/status.ts";
+import type { WorkItem } from "../work-management/store.ts";
 
 type Entity = Record<string, unknown>;
 type ActivityLike = Entity & { id: string; name: string };
@@ -132,6 +133,18 @@ function makeTaskNode(task: TaskLike, children: SupervisionNode[], now: Date): S
   };
 }
 
+function makeServiceNode(item: WorkItem, now: Date): SupervisionNode {
+  const entity = { status: item.nativeStatus, plannedEndAt: item.dueAt, plannedStartAt: item.plannedStartAt };
+  return {
+    id: item.id, entityType: "service", title: item.title, department: item.ownerDepartmentName,
+    assignee: item.assigneeName || item.requesterName, status: item.nativeStatus,
+    description: item.activityName ? `关联活动服务 · ${item.activityName}` : "部门服务事项",
+    start: item.plannedStartAt, end: item.dueAt, deadline: item.dueAt,
+    progress: workProgressScore(item.statusGroup), scheduleState: scheduleState(entity, now),
+    attachments: [], completionNote: item.blockedReason, children: [],
+  };
+}
+
 function leafNodes(nodes: SupervisionNode[]): SupervisionNode[] {
   return nodes.flatMap((node) => node.children.length ? node.children : [node]);
 }
@@ -198,6 +211,7 @@ export function buildActivitySupervision(
   subtasks: SubtaskLike[],
   events: WorkflowEventLike[],
   now = new Date(),
+  services: WorkItem[] = [],
 ): ActivitySupervisionDetail {
   const activityTasks = tasks.filter((task) => taskBelongsToActivity(task, activity, allActivities));
   const nodes = activityTasks.map((task) => {
@@ -206,6 +220,7 @@ export function buildActivitySupervision(
       .map((subtask) => makeSubtaskNode(subtask, text(task.department), now));
     return makeTaskNode(task, children, now);
   });
+  nodes.push(...services.filter((item) => item.activityId === activity.id).map((item) => makeServiceNode(item, now)));
   return {
     activity,
     summary: summarize(nodes),
@@ -221,8 +236,9 @@ export function buildSupervisionOverview(
   subtasks: SubtaskLike[],
   events: WorkflowEventLike[],
   now = new Date(),
+  services: WorkItem[] = [],
 ): SupervisionOverview {
-  const details = activities.map((activity) => buildActivitySupervision(activity, activities, tasks, subtasks, events, now));
+  const details = activities.map((activity) => buildActivitySupervision(activity, activities, tasks, subtasks, events, now, services));
   const cards = details.map((detail) => {
     const futureEnds = leafNodes(detail.tasks).map((node) => node.end).filter((value) => {
       const parsed = dateMs(value);

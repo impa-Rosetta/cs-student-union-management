@@ -28,6 +28,10 @@ export type Task = {
   deadline: string;
   status: TaskStatus;
   risk?: boolean;
+  blocked?: boolean;
+  blockedReason?: string;
+  reassignmentReason?: string;
+  scheduleChangeReason?: string;
   kind: string;
   description: string;
   fields: { label: string; value: string }[];

@@ -54,8 +54,9 @@ const EXPECTED = {
   system_config: ["id", "attachment_limit", "academic_year_month", "semester_boundary", "notification_days", "backup_time", "updated_by", "updated_at"],
   research_items: ["id", "name", "requester", "status", "detail", "sort_order", "created_at", "updated_at"],
   workflow_records: ["id", "kind", "payload_json", "created_at"],
-  tasks: ["id", "title", "department", "person", "deadline", "status", "risk", "kind", "description", "fields_json", "activity_id", "assignee_account_id", "owner_department_id", "activity_name", "planned_start_at", "planned_end_at", "activity_time", "activity_location", "liaison_teacher", "attachments_json", "control_mode", "last_action", "created_at", "updated_at"],
-  subtasks: ["id", "parent_task_id", "parent", "title", "assignee", "assignee_account_id", "deadline", "planned_start_at", "planned_end_at", "evidence", "status", "completed_by", "completion_note", "attachments_json", "last_action", "created_at", "updated_at"],
+  tasks: ["id", "title", "department", "person", "deadline", "status", "risk", "kind", "description", "fields_json", "activity_id", "assignee_account_id", "owner_department_id", "activity_name", "planned_start_at", "planned_end_at", "activity_time", "activity_location", "liaison_teacher", "attachments_json", "control_mode", "last_action", "blocked", "blocked_reason", "reassignment_reason", "schedule_change_reason", "created_at", "updated_at"],
+  subtasks: ["id", "parent_task_id", "parent", "title", "assignee", "assignee_account_id", "deadline", "planned_start_at", "planned_end_at", "evidence", "status", "completed_by", "completion_note", "attachments_json", "last_action", "blocked", "blocked_reason", "reassignment_reason", "schedule_change_reason", "created_at", "updated_at"],
+  task_dependencies: ["id", "predecessor_task_id", "successor_task_id", "dependency_type", "created_by", "created_at"],
 };
 
 function stripBackticks(name) {

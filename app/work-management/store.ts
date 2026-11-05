@@ -193,3 +193,11 @@ export async function listWorkItemsForUser(user: AuthenticatedUser): Promise<Wor
   return items.filter((item) => item.requesterUsername === user.username || item.assigneeAccountId === user.id || item.nextActorId === user.username || item.nextActorId === String(user.id));
 }
 
+export async function listActivityServiceWorkItems(activityId?: string): Promise<WorkItem[]> {
+  await rebuildWorkItemIndex();
+  const rows = activityId
+    ? await db.prepare("SELECT * FROM work_items WHERE activity_id = ? AND source_type NOT IN ('task','subtask') ORDER BY updated_at DESC").bind(activityId).all<WorkItemRow>()
+    : await db.prepare("SELECT * FROM work_items WHERE activity_id <> '' AND source_type NOT IN ('task','subtask') ORDER BY updated_at DESC").all<WorkItemRow>();
+  return (rows.results || []).map(rowToItem);
+}
+

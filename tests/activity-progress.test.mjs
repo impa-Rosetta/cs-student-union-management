@@ -31,3 +31,11 @@ test("overrides manual activity progress with calculated execution progress", ()
   assert.equal(activity.leafCount, 4);
 });
 
+test("includes linked department services but excludes services from other activities", () => {
+  const result = calculateActivityExecutionProgress(tasks, subtasks, "a1", [
+    { activityId: "a1", statusGroup: "done" },
+    { activityId: "a2", statusGroup: "done" },
+  ]);
+  assert.deepEqual(result, { progress: 80, leafCount: 5, completedLeafCount: 3, pending: 2 });
+});
+

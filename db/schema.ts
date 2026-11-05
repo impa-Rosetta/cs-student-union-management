@@ -273,6 +273,10 @@ export const tasks = sqliteTable("tasks", {
   attachmentsJson: text("attachments_json").notNull().default("[]"),
   controlMode: text("control_mode"),
   lastAction: text("last_action"),
+  blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+  blockedReason: text("blocked_reason").notNull().default(""),
+  reassignmentReason: text("reassignment_reason").notNull().default(""),
+  scheduleChangeReason: text("schedule_change_reason").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
@@ -297,11 +301,27 @@ export const subtasks = sqliteTable("subtasks", {
   completionNote: text("completion_note"),
   attachmentsJson: text("attachments_json").notNull().default("[]"),
   lastAction: text("last_action"),
+  blocked: integer("blocked", { mode: "boolean" }).notNull().default(false),
+  blockedReason: text("blocked_reason").notNull().default(""),
+  reassignmentReason: text("reassignment_reason").notNull().default(""),
+  scheduleChangeReason: text("schedule_change_reason").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [
   index("idx_subtasks_parent").on(table.parentTaskId),
   index("idx_subtasks_assignee_account").on(table.assigneeAccountId),
+]);
+
+export const taskDependencies = sqliteTable("task_dependencies", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  predecessorTaskId: integer("predecessor_task_id").notNull(),
+  successorTaskId: integer("successor_task_id").notNull(),
+  dependencyType: text("dependency_type").notNull().default("finish_to_start"),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("idx_task_dependencies_pair").on(table.predecessorTaskId, table.successorTaskId),
+  index("idx_task_dependencies_successor").on(table.successorTaskId),
 ]);
 
 export const whiteCardSubmissions = sqliteTable("white_card_submissions", {

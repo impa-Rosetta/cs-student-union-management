@@ -24,6 +24,10 @@ export interface WorkflowTask {
   plannedEndAt?: string;
   controlMode?: ControlMode;
   lastAction?: string;
+  blocked?: boolean;
+  blockedReason?: string;
+  reassignmentReason?: string;
+  scheduleChangeReason?: string;
   attachments?: WorkflowAttachment[];
 }
 
@@ -43,6 +47,10 @@ export interface WorkflowSubtask {
   completionNote?: string;
   attachments?: WorkflowAttachment[];
   lastAction?: string;
+  blocked?: boolean;
+  blockedReason?: string;
+  reassignmentReason?: string;
+  scheduleChangeReason?: string;
 }
 
 export interface WorkflowNotificationDraft {
