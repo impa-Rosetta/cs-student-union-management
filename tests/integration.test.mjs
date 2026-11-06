@@ -986,13 +986,22 @@ test("学习部白卡：模板与权限校验",async()=>{
   res=await learningDepartmentRoute.POST(requestFor("learning@demo.local",{method:"POST",path:"/api/learning-department",body:{attachments:[]}}));assert.equal(res.status,400);
 });
 
-test("统一工作项：接入任务、子任务、采购与白卡并按角色裁剪", async () => {
+test("统一工作项：接入任务和各部门流程并按角色裁剪", async () => {
+  const { ensureOfficeServiceSchema } = await import("../app/office-service/store.ts");
+  await ensureOfficeServiceSchema();
+  await repo.prepare("INSERT OR IGNORE INTO meeting_rounds (id,title,deadline,status,department_names_json) VALUES (?,?,?,?,?)")
+    .bind("meeting-work-items", "周例会通报", "2026-11-08T18:00:00+08:00", "收集中", JSON.stringify(["科创中心"])).run();
+  await repo.prepare("INSERT OR IGNORE INTO meeting_reports (id,round_id,department,status) VALUES (?,?,?,?)")
+    .bind("meeting-report-work-items", "meeting-work-items", "科创中心", "未填写").run();
   const chairResponse = await workItemsRoute.GET(requestFor("chair@demo.local", { path: "/api/work-items" }));
   assert.equal(chairResponse.status, 200);
   const chairBody = await chairResponse.json();
   assert.ok(chairBody.items.some((item) => item.sourceType === "task" && item.sourceId === "100"));
   assert.ok(chairBody.items.some((item) => item.sourceType === "subtask"));
   assert.ok(chairBody.items.some((item) => item.sourceType === "purchase_request"));
+  assert.ok(chairBody.items.some((item) => item.sourceType === "meeting_report" && item.sourceId === "meeting-report-work-items"));
+  assert.ok(chairBody.items.some((item) => item.sourceType === "organization_change"));
+  assert.ok(chairBody.items.some((item) => item.sourceType === "organization_affair"));
   const whiteCard = chairBody.items.find((item) => item.sourceType === "white_card");
   assert.ok(whiteCard);
   assert.equal(whiteCard.activityId, "", "白卡必须禁止关联活动");
@@ -1001,4 +1010,10 @@ test("统一工作项：接入任务、子任务、采购与白卡并按角色�
   const learningBody = await learningResponse.json();
   assert.ok(learningBody.items.some((item) => item.sourceType === "white_card"));
   assert.equal(learningBody.items.some((item) => item.sourceType === "task" && item.sourceId === "100"), false);
+
+  const leaderResponse = await workItemsRoute.GET(requestFor("leader@demo.local", { path: "/api/work-items" }));
+  const leaderBody = await leaderResponse.json();
+  const report = leaderBody.items.find((item) => item.sourceType === "meeting_report" && item.sourceId === "meeting-report-work-items");
+  assert.ok(report, "对应部门负责人应看到本部门例会通报");
+  assert.equal(report.nextActorId, "科创中心:leader");
 });

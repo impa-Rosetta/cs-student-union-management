@@ -7,6 +7,7 @@ import type { WorkItem, WorkItemSourceType } from "./work-management/store";
 
 const sourceLabels: Record<WorkItemSourceType, string> = {
   task: "主任务", subtask: "干事任务", venue_request: "教室借用", purchase_request: "采购申请", white_card: "白卡制作",
+  meeting_report: "例会通报", organization_change: "成员异动", organization_affair: "组织事务",
 };
 
 const statusLabels: Record<string, string> = {

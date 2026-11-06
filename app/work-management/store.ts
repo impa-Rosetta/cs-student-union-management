@@ -6,7 +6,7 @@ import { toUnifiedWorkStatus, type UnifiedWorkStatus } from "./status.ts";
 const db = getDb();
 let schemaPromise: Promise<void> | null = null;
 
-export type WorkItemSourceType = "task" | "subtask" | "venue_request" | "purchase_request" | "white_card";
+export type WorkItemSourceType = "task" | "subtask" | "venue_request" | "purchase_request" | "white_card" | "meeting_report" | "organization_change" | "organization_affair";
 
 export type WorkItem = {
   id: string;
@@ -114,6 +114,18 @@ function nextActorFor(sourceType: WorkItemSourceType, row: RawRecord) {
     if (["草稿", "待补充材料"].includes(status)) return { type: "account", id: text(row.requester_username) };
     return { type: "department", id: status === "待办公室报销" ? "办公室" : "生活部" };
   }
+  if (sourceType === "meeting_report") return ["未填写", "草稿", "待修改"].includes(status)
+    ? { type: "department_role", id: `${text(row.department)}:leader` }
+    : { type: "department", id: "办公室" };
+  if (sourceType === "organization_change") {
+    if (["草稿", "待申请人修改"].includes(status)) return { type: "account", id: text(row.requester_username) };
+    if (["待组织部审核", "待组织部复核"].includes(status)) return { type: "department", id: "组织部" };
+    if (status === "待主席团确认") return { type: "role", id: "chair" };
+    return { type: "", id: "" };
+  }
+  if (sourceType === "organization_affair") return status === "待结果确认"
+    ? { type: "role", id: "chair" }
+    : { type: "department", id: "组织部" };
   if (status === "待新媒体领取") return { type: "department", id: "新媒体中心" };
   if (status === "新媒体制作中") return { type: "account", id: text(row.handler_username) };
   if (status === "待主席审核") return { type: "account", id: text(row.reviewer_username) };
@@ -129,7 +141,7 @@ function project(sourceType: WorkItemSourceType, row: RawRecord): WorkItem {
   return {
     id: `${sourceType}:${sourceId}`, sourceType, sourceId, title: text(row.title), statusGroup: toUnifiedWorkStatus(status),
     nativeStatus: status, activityId: isWhiteCard ? "" : text(row.activity_id), activityName: isWhiteCard ? "" : text(row.activity_name),
-    ownerDepartmentName: sourceType === "task" || sourceType === "subtask" ? text(row.department) : sourceType === "venue_request" ? "办公室" : sourceType === "purchase_request" ? "生活部" : "学习部 / 新媒体中心",
+    ownerDepartmentName: sourceType === "task" || sourceType === "subtask" || sourceType === "meeting_report" ? text(row.department) : sourceType === "venue_request" ? "办公室" : sourceType === "purchase_request" ? "生活部" : sourceType === "organization_change" || sourceType === "organization_affair" ? "组织部" : "学习部 / 新媒体中心",
     assigneeAccountId: numberOrNull(row.assignee_account_id) ?? undefined,
     assigneeName: text(row.person || row.assignee || row.handler_name || row.reviewer_name),
     requesterAccountId: numberOrNull(row.requester_account_id) ?? undefined,
@@ -165,17 +177,23 @@ async function upsertProjected(items: WorkItem[]) {
 export async function rebuildWorkItemIndex() {
   await ensureTaskSchema();
   await ensureWorkItemSchema();
-  const [tasks, subtasks, venues, purchases, whiteCards] = await Promise.all([
+  const [tasks, subtasks, venues, purchases, whiteCards, meetingReports, organizationChanges, organizationAffairs] = await Promise.all([
     safeAll("SELECT * FROM tasks"),
     safeAll("SELECT subtasks.*, tasks.department, tasks.activity_id, tasks.activity_name FROM subtasks LEFT JOIN tasks ON tasks.id = subtasks.parent_task_id"),
     safeAll("SELECT venue_requests.*, app_accounts.id AS requester_account_id FROM venue_requests LEFT JOIN app_accounts ON app_accounts.username = venue_requests.requester_username"),
     safeAll("SELECT purchase_requests.*, app_accounts.id AS requester_account_id FROM purchase_requests LEFT JOIN app_accounts ON app_accounts.username = purchase_requests.requester_username"),
     safeAll("SELECT white_card_submissions.*, app_accounts.id AS requester_account_id FROM white_card_submissions LEFT JOIN app_accounts ON app_accounts.username = white_card_submissions.submitter_username"),
+    safeAll("SELECT meeting_reports.*, meeting_rounds.title, meeting_rounds.deadline, meeting_rounds.updated_at AS round_updated_at FROM meeting_reports LEFT JOIN meeting_rounds ON meeting_rounds.id = meeting_reports.round_id"),
+    safeAll("SELECT organization_change_requests.*, type || '：' || member_name AS title FROM organization_change_requests"),
+    safeAll("SELECT organization_affairs.* FROM organization_affairs"),
   ]);
   const items = [
     ...tasks.map((row) => project("task", row)), ...subtasks.map((row) => project("subtask", row)),
     ...venues.map((row) => project("venue_request", row)), ...purchases.map((row) => project("purchase_request", row)),
     ...whiteCards.map((row) => project("white_card", row)),
+    ...meetingReports.map((row) => project("meeting_report", row)),
+    ...organizationChanges.map((row) => project("organization_change", row)),
+    ...organizationAffairs.map((row) => project("organization_affair", row)),
   ];
   await upsertProjected(items);
   return items.length;
@@ -190,7 +208,8 @@ export async function listWorkItemsForUser(user: AuthenticatedUser): Promise<Wor
     item.ownerDepartmentName.includes(user.department) || item.requesterUsername === user.username ||
     item.assigneeAccountId === user.id || item.nextActorId === user.username || item.nextActorId === user.department || item.nextActorId === `${user.department}:leader`,
   );
-  return items.filter((item) => item.requesterUsername === user.username || item.assigneeAccountId === user.id || item.nextActorId === user.username || item.nextActorId === String(user.id));
+  return items.filter((item) => item.requesterUsername === user.username || item.assigneeAccountId === user.id || item.nextActorId === user.username || item.nextActorId === String(user.id) ||
+    (["meeting_report", "organization_affair"].includes(item.sourceType) && item.ownerDepartmentName === user.department));
 }
 
 export async function listActivityServiceWorkItems(activityId?: string): Promise<WorkItem[]> {

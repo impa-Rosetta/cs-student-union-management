@@ -17,7 +17,7 @@ const emptyDraft=():Draft=>({title:"",purposeCategory:"学生组织活动",usage
 const toggle=(items:string[],item:string)=>items.includes(item)?items.filter(value=>value!==item):[...items,item];
 const actionLabel:Record<string,string>={create:"保存草稿",submit:"提交审核",resubmit:"重新提交",return:"退回补充",process:"开始办理",success:"借用成功",fail:"借用失败",cancel:"取消申请",archive:"归档"};
 
-export function VenueRequestWorkspace({user,role,activities,notify}:{user:DemoUser;role:UserRole;activities:ActivityRecord[];notify:(message:string)=>void}){
+export function VenueRequestWorkspace({user,role,activities,notify,initialRecordId}:{user:DemoUser;role:UserRole;activities:ActivityRecord[];notify:(message:string)=>void;initialRecordId?:string}){
   const [items,setItems]=useState<Venue[]>([]); const [events,setEvents]=useState<VenueEvent[]>([]); const [departments,setDepartments]=useState<string[]>(FALLBACK_DEPARTMENTS); const [loading,setLoading]=useState(true);
   const [creating,setCreating]=useState(false); const [editingId,setEditingId]=useState<string|null>(null); const [draft,setDraft]=useState<Draft>(emptyDraft()); const [selected,setSelected]=useState<Venue|null>(null); const [busy,setBusy]=useState(false);
   const [pendingAction,setPendingAction]=useState<{item:Venue;action:string;note:string;confirmedRoom:string;confirmedDate:string;confirmedStartTime:string;confirmedEndTime:string}|null>(null);
@@ -26,6 +26,8 @@ export function VenueRequestWorkspace({user,role,activities,notify}:{user:DemoUs
   // Initial API hydration for this standalone workspace.
   // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(()=>{void load();},[]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(()=>{if(initialRecordId){const target=items.find(item=>item.id===initialRecordId);if(target)setSelected(target);}},[initialRecordId,items]);
   const visible=useMemo(()=>items,[items]);
   function edit(item:Venue){setEditingId(item.id);setDraft({title:item.title,purposeCategory:item.purposeCategory,usageDepartments:item.usageDepartments,usageDate:item.usageDate,startTime:item.startTime,endTime:item.endTime,attendeeCount:item.attendeeCount,roomTypes:item.roomTypes,equipment:item.equipment,preferredLocation:item.preferredLocation,notes:item.notes,attachments:item.attachments,activityId:item.activityId,activityName:item.activityName});setCreating(true);}
   async function upload(files:FileList|null){if(!files?.length)return;setBusy(true);try{const added:Attachment[]=[];for(const file of Array.from(files)){const data=new FormData();data.append("file",file);const response=await fetch("/api/files",{method:"POST",body:data});const result=await response.json();if(!response.ok)throw new Error(result.error);added.push(result.attachment);}setDraft(current=>({...current,attachments:[...current.attachments,...added]}));}catch(error){notify(error instanceof Error?error.message:"附件上传失败");}finally{setBusy(false);}}

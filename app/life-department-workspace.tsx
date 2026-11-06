@@ -18,7 +18,7 @@ async function uploadFiles(files: FileList | null): Promise<Attachment[]> {
   const result: Attachment[]=[]; for(const file of Array.from(files||[])){const form=new FormData();form.append("file",file);const response=await fetch("/api/files",{method:"POST",body:form});const body=await response.json();if(!response.ok)throw new Error(body.error||`${file.name}上传失败`);result.push(body.attachment);}return result;
 }
 
-export function LifeDepartmentWorkspace({ user, role, activities, notify, onBack }: { user: DemoUser; role: UserRole; activities: ActivityRecord[]; notify: (message: string) => void; onBack: () => void }) {
+export function LifeDepartmentWorkspace({ user, role, activities, notify, onBack, initialRecordId }: { user: DemoUser; role: UserRole; activities: ActivityRecord[]; notify: (message: string) => void; onBack: () => void; initialRecordId?: string }) {
   const [data,setData]=useState<LifeData>(emptyData); const [loading,setLoading]=useState(true); const [tab,setTab]=useState<Tab>("overview"); const [query,setQuery]=useState("");
   const [createKind,setCreateKind]=useState<CreateKind|null>(null); const [selectedPurchase,setSelectedPurchase]=useState<PurchaseRequest|null>(null); const [selectedLost,setSelectedLost]=useState<LostFoundItem|null>(null); const [selectedBatch,setSelectedBatch]=useState<InspectionBatch|null>(null); const [recordRoom,setRecordRoom]=useState<DormRoom|null>(null); const [action,setAction]=useState<ActionState|null>(null); const [busy,setBusy]=useState(false);
   const [editingPurchaseId,setEditingPurchaseId]=useState<string|null>(null);
@@ -33,6 +33,8 @@ export function LifeDepartmentWorkspace({ user, role, activities, notify, onBack
   // Initial load synchronizes this workspace with its server-side store.
   // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(()=>{void load();},[]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(()=>{if(initialRecordId){const target=data.purchases.find(item=>item.id===initialRecordId);if(target){setSelectedPurchase(target);setTab("purchase");}}},[initialRecordId,data.purchases]);
   const visiblePurchases=useMemo(()=>data.purchases.filter((item)=>`${item.title}${item.requesterDepartment}${item.activityName}`.includes(query)),[data.purchases,query]);
   const visibleLost=useMemo(()=>data.lostFound.filter((item)=>`${item.name}${item.category}${item.foundLocation}`.includes(query)),[data.lostFound,query]);
   const manager=data.permissions.canManage;

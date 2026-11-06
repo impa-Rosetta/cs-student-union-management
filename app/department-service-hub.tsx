@@ -7,6 +7,7 @@ import { OfficeWorkspace } from "./office-workspace";
 import { LifeDepartmentWorkspace } from "./life-department-workspace";
 import { OrganizationDepartmentWorkspace } from "./organization-department-workspace";
 import { LearningDepartmentWorkspace } from "./learning-department-workspace";
+import type { WorkItem } from "./work-management/store";
 
 const FALLBACK_DEPARTMENTS = [
   "办公室", "实践部", "生活部", "党员之家", "组织部", "心理部", "科创中心",
@@ -29,7 +30,7 @@ const departmentDescriptions: Record<string, string> = {
   科创中心: "科创项目、程序设计竞赛、设备保障与技术支持",
 };
 
-export function DepartmentServiceHub({ user, role, activities, notify, initialDepartment = null }: { user: DemoUser; role: UserRole; activities: ActivityRecord[]; notify: (message: string) => void; initialDepartment?: string | null }) {
+export function DepartmentServiceHub({ user, role, activities, notify, initialDepartment = null, initialWorkItem = null }: { user: DemoUser; role: UserRole; activities: ActivityRecord[]; notify: (message: string) => void; initialDepartment?: string | null; initialWorkItem?: WorkItem | null }) {
   const [departments, setDepartments] = useState<OrgDepartment[]>(FALLBACK_DEPARTMENTS);
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(initialDepartment);
 
@@ -37,19 +38,19 @@ export function DepartmentServiceHub({ user, role, activities, notify, initialDe
   useEffect(() => { void fetch("/api/organization").then((response) => response.ok ? response.json() : null).then((result: OrgSnapshot | null) => { if (result?.departments?.length) setDepartments(result.departments.slice().sort((a, b) => a.sortOrder - b.sortOrder)); }).catch(() => undefined); }, []);
 
   if (selectedDepartment === "办公室") {
-    return <OfficeWorkspace user={user} role={role} activities={activities} notify={notify} onBack={() => setSelectedDepartment(null)}/>;
+    return <OfficeWorkspace user={user} role={role} activities={activities} notify={notify} onBack={() => setSelectedDepartment(null)} initialRecordId={initialWorkItem?.sourceId} initialSourceType={initialWorkItem?.sourceType}/>;
   }
 
   if (selectedDepartment === "生活部") {
-    return <LifeDepartmentWorkspace user={user} role={role} activities={activities} notify={notify} onBack={() => setSelectedDepartment(null)}/>;
+    return <LifeDepartmentWorkspace user={user} role={role} activities={activities} notify={notify} onBack={() => setSelectedDepartment(null)} initialRecordId={initialWorkItem?.sourceId}/>;
   }
 
   if (selectedDepartment === "组织部") {
-    return <OrganizationDepartmentWorkspace user={user} role={role} notify={notify} onBack={() => setSelectedDepartment(null)}/>;
+    return <OrganizationDepartmentWorkspace user={user} role={role} notify={notify} onBack={() => setSelectedDepartment(null)} initialRecordId={initialWorkItem?.sourceId} initialSourceType={initialWorkItem?.sourceType}/>;
   }
 
   if (selectedDepartment === "学习部" || selectedDepartment === "新媒体中心") {
-    return <LearningDepartmentWorkspace user={user} role={role} notify={notify} entryDepartment={selectedDepartment} onBack={() => setSelectedDepartment(null)}/>;
+    return <LearningDepartmentWorkspace user={user} role={role} notify={notify} entryDepartment={selectedDepartment} onBack={() => setSelectedDepartment(null)} initialRecordId={initialWorkItem?.sourceId}/>;
   }
 
   if (selectedDepartment) {

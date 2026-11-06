@@ -72,6 +72,7 @@ export default function Home() {
   const [uploading, setUploading] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>("overview");
   const [departmentServiceTarget, setDepartmentServiceTarget] = useState<string | null>(null);
+  const [workItemTarget, setWorkItemTarget] = useState<WorkItem | null>(null);
   const [eventWorkspaceOpen, setEventWorkspaceOpen] = useState(false);
   const [filter, setFilter] = useState("全部任务");
   const [query, setQuery] = useState("");
@@ -558,6 +559,29 @@ export default function Home() {
     setActiveView("departmentServices");
   }
 
+  function openWorkItem(item: WorkItem) {
+    setWorkItemTarget(item);
+    if (item.sourceType === "task" || item.sourceType === "subtask") {
+      const taskId = item.sourceType === "task"
+        ? Number(item.sourceId)
+        : subtasks.find((subtask) => String(subtask.id) === item.sourceId)?.parentTaskId;
+      const target = tasks.find((task) => task.id === taskId);
+      if (target) setSelected(target);
+      else setActiveView("tasks");
+      return;
+    }
+    if (item.sourceType === "venue_request") {
+      setActiveView("venueRequests");
+      return;
+    }
+    const targetDepartment = item.sourceType === "purchase_request" ? "生活部"
+      : item.sourceType === "meeting_report" ? "办公室"
+      : item.sourceType === "organization_change" || item.sourceType === "organization_affair" ? "组织部"
+      : "学习部";
+    setDepartmentServiceTarget(targetDepartment);
+    setActiveView("departmentServices");
+  }
+
   async function submitQuickFlow(data: Record<string,string>) {
     void fetch("/api/workflow-records", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ record: { ...data, kind: quickFlow || "", createdAt: new Date().toISOString() } }) }).catch(() => undefined);
     if (quickFlow === "activity" || quickFlow === "eventSettings") {
@@ -683,7 +707,7 @@ export default function Home() {
         {showNotifications && <aside className="notification-panel"><header><div><h2>{userRole === "admin" ? "系统通知" : userRole === "chair" ? "主席通知" : userRole === "leader" ? "负责人通知" : userRole === "teacher" ? "指导教师通知" : "我的通知"}</h2><span>{unreadNotificationCount} 条未读</span></div><button className="icon-button" onClick={() => setShowNotifications(false)}><X size={17}/></button></header><div>{notifications.length ? notifications.map((item) => { const isRead = readNotifications.includes(item.id); return <button key={item.id} className={`${item.level || ""} ${isRead ? "read" : ""}`} onClick={() => openNotification(item)}><i/><span><strong>{item.title}</strong><p>{item.detail}</p><small>{item.time}</small></span></button>; }) : <div className="notification-empty"><Bell size={20}/><strong>暂无通知</strong></div>}</div><footer><button disabled={!unreadNotificationCount} onClick={() => { const ids = notifications.map((item) => item.id); setReadNotifications(ids); if (session) void fetch("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: session.username, ids }) }).catch(() => undefined); setNotice("已将当前通知全部标为已读"); }}>全部标为已读</button></footer></aside>}
 
         <div className="content">
-          {activeView === "workItems" ? <WorkItemsDashboard user={session} onOpenSource={(item: WorkItem) => { if (item.sourceType === "task" || item.sourceType === "subtask") setActiveView("tasks"); else if (item.sourceType === "venue_request") setActiveView("venueRequests"); else { setDepartmentServiceTarget(item.sourceType === "purchase_request" ? "生活部" : "学习部"); setActiveView("departmentServices"); } }}/>: activeView !== "overview" ? <ProductModule user={session} view={activeView} tasks={tasks} activities={activities} archiveItems={archiveItems} role={userRole} departmentServiceTarget={departmentServiceTarget} onBack={() => { setActiveView("overview"); setEventWorkspaceOpen(userRole === "chair"); }} onOpenTask={setSelected} onCreate={userRole === "chair" ? openNewTask : () => setNotice("只有主席可以发布主任务")} onCreateActivity={() => { setEditingActivity(null); setQuickFlow("activity"); }} onEditActivity={editActivity} onActivityAction={runActivityAction} onUploadArchive={() => setQuickFlow("archive")} notify={handleNotify} pushNotification={pushNotification} /> : userRole !== "chair" ? <RoleDashboard user={session} accounts={accountDirectory} role={userRole} tasks={tasks} activities={activities} subtasks={subtasks} onWorkflowAction={runWorkflowAction} onOpenTask={setSelected} onStartMain={startMainAsLeader} onSubmitMain={submitMainForChair} onWithdrawMain={withdrawMainForLeader} onOpenWhiteCards={openWhiteCards} notify={handleNotify} notifications={notifications} /> : !eventWorkspaceOpen ? <div className="role-dashboard-stack"><WhiteCardDashboardTodo user={session} onOpen={openWhiteCards}/><ChairOverview tasks={tasks} activities={activities} onOpenTask={setSelected} onOpenActivities={() => setActiveView("activities")} onOpenTasks={() => setActiveView("tasks")}/></div> : <>
+          {activeView === "workItems" ? <WorkItemsDashboard user={session} onOpenSource={openWorkItem}/>: activeView !== "overview" ? <ProductModule user={session} view={activeView} tasks={tasks} activities={activities} archiveItems={archiveItems} role={userRole} departmentServiceTarget={departmentServiceTarget} workItemTarget={workItemTarget} onBack={() => { setActiveView("overview"); setEventWorkspaceOpen(userRole === "chair"); }} onOpenTask={setSelected} onCreate={userRole === "chair" ? openNewTask : () => setNotice("只有主席可以发布主任务")} onCreateActivity={() => { setEditingActivity(null); setQuickFlow("activity"); }} onEditActivity={editActivity} onActivityAction={runActivityAction} onUploadArchive={() => setQuickFlow("archive")} notify={handleNotify} pushNotification={pushNotification} /> : userRole !== "chair" ? <RoleDashboard user={session} accounts={accountDirectory} role={userRole} tasks={tasks} activities={activities} subtasks={subtasks} onWorkflowAction={runWorkflowAction} onOpenTask={setSelected} onStartMain={startMainAsLeader} onSubmitMain={submitMainForChair} onWithdrawMain={withdrawMainForLeader} onOpenWhiteCards={openWhiteCards} notify={handleNotify} notifications={notifications} /> : !eventWorkspaceOpen ? <div className="role-dashboard-stack"><WhiteCardDashboardTodo user={session} onOpen={openWhiteCards}/><ChairOverview tasks={tasks} activities={activities} onOpenTask={setSelected} onOpenActivities={() => setActiveView("activities")} onOpenTasks={() => setActiveView("tasks")}/></div> : <>
           <section className="event-head">
             <div className="event-title-row">
               <div><span className="event-kicker">校级文体活动 · 筹备中</span><h1>计算学院十佳歌手比赛</h1></div>

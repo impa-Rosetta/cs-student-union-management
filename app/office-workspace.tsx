@@ -13,7 +13,7 @@ type ExportRecord={id:string;roundId:string;objectKey:string;fileName:string;cre
 const fallbackDepartments=["办公室","实践部","生活部","党员之家","组织部","心理部","科创中心","职规部","学习部","体育部","文艺部","新媒体中心","校友部"];
 const blankReport=(report:Report):Report=>({...report,lastWeek:report.lastWeek||"",thisWeek:report.thisWeek||"",noticeCount:report.noticeCount||0,mediaCount:report.mediaCount||0,emailReceived:report.emailReceived||0,emailSent:report.emailSent||0,meetingAttendance:report.meetingAttendance||0,meetingDuration:report.meetingDuration||"",unplannedWorkload:report.unplannedWorkload||""});
 
-export function OfficeWorkspace({user,role,activities,notify,onBack}:{user:DemoUser;role:UserRole;activities:ActivityRecord[];notify:(message:string)=>void;onBack:()=>void}){
+export function OfficeWorkspace({user,role,activities,notify,onBack,initialRecordId,initialSourceType}:{user:DemoUser;role:UserRole;activities:ActivityRecord[];notify:(message:string)=>void;onBack:()=>void;initialRecordId?:string;initialSourceType?:string}){
   const [tab,setTab]=useState<"venue"|"meeting">("meeting");
   const [rounds,setRounds]=useState<Round[]>([]);const [reports,setReports]=useState<Report[]>([]);const [exports,setExports]=useState<ExportRecord[]>([]);const [departments,setDepartments]=useState<string[]>(fallbackDepartments);
   const [creating,setCreating]=useState(false);const [roundDraft,setRoundDraft]=useState({title:"学生联盟例会通报",meetingDate:"",deadline:"",departmentNames:fallbackDepartments});const [selectedRoundId,setSelectedRoundId]=useState("");const [editing,setEditing]=useState<Report|null>(null);const [busy,setBusy]=useState(false);
@@ -24,6 +24,8 @@ export function OfficeWorkspace({user,role,activities,notify,onBack}:{user:DemoU
   // Initial API hydration for the office workspace.
   // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
   useEffect(()=>{void load();},[]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(()=>{if(initialSourceType==="meeting_report"&&initialRecordId){const target=reports.find(report=>report.id===initialRecordId);if(target){setTab("meeting");setSelectedRoundId(target.roundId);setEditing(blankReport(target));}}},[initialRecordId,initialSourceType,reports]);
   const selectedRound=rounds.find(round=>round.id===selectedRoundId)||rounds[0];const roundReports=useMemo(()=>reports.filter(report=>report.roundId===selectedRound?.id),[reports,selectedRound?.id]);
   async function createRound(publish:boolean){setBusy(true);try{const response=await fetch("/api/office-service",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:"meetingRound",round:roundDraft,publish})});const result=await response.json();if(!response.ok)throw new Error(result.error);setCreating(false);setSelectedRoundId(result.round.id);notify(publish?"例会通报任务已发布":"例会通报草稿已创建");await load();}catch(error){notify(error instanceof Error?error.message:"创建失败");}finally{setBusy(false);}}
   async function roundAction(action:string){if(!selectedRound)return;setBusy(true);try{const response=await fetch("/api/office-service",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({kind:"meetingRound",id:selectedRound.id,action})});const result=await response.json();if(!response.ok)throw new Error(result.error);notify("例会任务状态已更新");await load();}catch(error){notify(error instanceof Error?error.message:"操作失败");}finally{setBusy(false);}}
