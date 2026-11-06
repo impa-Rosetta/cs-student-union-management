@@ -82,3 +82,11 @@ export function WorkItemsDashboard({ user, onOpenSource }: { user: DemoUser; onO
   </div>;
 }
 
+export function DepartmentTodoSummary({ user, onOpenSource }: { user: DemoUser; onOpenSource: (item: WorkItem) => void }) {
+  const [items,setItems]=useState<WorkItem[]>([]);
+  useEffect(()=>{let active=true;void fetch("/api/work-items").then(async response=>response.ok?response.json():null).then(result=>{if(active&&Array.isArray(result?.items))setItems(result.items);}).catch(()=>undefined);return()=>{active=false;};},[user.username]);
+  const pending=items.filter(item=>isOpen(item)&&(item.nextActorId===user.username||item.nextActorId===String(user.id||"")||item.nextActorId===user.department||item.nextActorId===`${user.department}:leader`||(["chair","admin"].includes(user.role)&&item.nextActorId==="chair"))).slice(0,5);
+  if(!pending.length)return null;
+  return <section className="white-card-dashboard-todos"><header><div><span>统一业务待办</span><h2>需要我处理</h2></div></header><div>{pending.map(item=><button key={item.id} onClick={()=>onOpenSource(item)}><i><CircleDot size={17}/></i><span><strong>{item.title}</strong><small>{sourceLabels[item.sourceType]} · {item.ownerDepartmentName}</small></span><em>{item.nativeStatus}</em><ChevronRight size={15}/></button>)}</div></section>;
+}
+

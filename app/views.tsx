@@ -15,6 +15,7 @@ import { TeacherSupervisionDashboard } from "./teacher-supervision-dashboard";
 import { VenueRequestWorkspace } from "./venue-request-workspace";
 import { whiteCardDashboardTodos, whiteCardTodoLabel, type WhiteCardTodoRecord } from "./learning-department/dashboard-todos";
 import type { WorkItem } from "./work-management/store";
+import { DepartmentTodoSummary } from "./work-items-dashboard";
 import {
   blankMember, currentActivity, deleteAttachmentObject, isSubtaskOf,
   parseMemberImportRows, quickFlowTitles, seededAccounts,
@@ -376,12 +377,12 @@ export function WhiteCardDashboardTodo({user,onOpen}:{user:DemoUser;onOpen:()=>v
   return <section className="white-card-dashboard-todos"><header><div><span>部门协作待办</span><h2>白卡制作与审核</h2></div><button onClick={onOpen}>进入工作区<ChevronRight size={14}/></button></header><div>{todos.slice(0,4).map(item=><button key={item.id} onClick={onOpen}><i><FileSpreadsheet size={17}/></i><span><strong>{item.title}</strong><small>{item.status==="待学习部修改"&&item.returnReason?item.returnReason:item.handlerName?`经办人：${item.handlerName}`:`提交人：${item.submitterName}`}</small></span><em>{whiteCardTodoLabel(item)}</em><ChevronRight size={15}/></button>)}</div></section>;
 }
 
-export function RoleDashboard({ user, accounts, role, tasks, subtasks, onWorkflowAction, onOpenTask, onStartMain, onSubmitMain, onWithdrawMain, onOpenWhiteCards, notify, notifications }: { user: DemoUser; accounts: ManagedAccount[]; role: UserRole; tasks: Task[]; activities: ActivityRecord[]; subtasks: DelegatedTask[]; onWorkflowAction: (payload: WorkflowActionPayload) => Promise<{ ok: boolean; error?: string }>; onOpenTask: (task: Task) => void; onStartMain: (task: Task) => void; onSubmitMain: (task: Task) => void; onWithdrawMain: (task: Task) => void; onOpenWhiteCards: () => void; notify: (message: string) => void; notifications: NotificationItem[] }) {
+export function RoleDashboard({ user, accounts, role, tasks, subtasks, onWorkflowAction, onOpenTask, onOpenWorkItem, onStartMain, onSubmitMain, onWithdrawMain, onOpenWhiteCards, notify, notifications }: { user: DemoUser; accounts: ManagedAccount[]; role: UserRole; tasks: Task[]; activities: ActivityRecord[]; subtasks: DelegatedTask[]; onWorkflowAction: (payload: WorkflowActionPayload) => Promise<{ ok: boolean; error?: string }>; onOpenTask: (task: Task) => void; onOpenWorkItem: (item: WorkItem) => void; onStartMain: (task: Task) => void; onSubmitMain: (task: Task) => void; onWithdrawMain: (task: Task) => void; onOpenWhiteCards: () => void; notify: (message: string) => void; notifications: NotificationItem[] }) {
   if (role === "admin") return <AdminDashboard notify={notify} accounts={accounts}/>;
-  if (role === "leader") return <div className="role-dashboard-stack"><WhiteCardDashboardTodo user={user} onOpen={onOpenWhiteCards}/><LeaderTaskWorkspace user={user} accounts={accounts} tasks={tasks} subtasks={subtasks} onWorkflowAction={onWorkflowAction} onOpenTask={onOpenTask} onStartMain={onStartMain} onSubmitMain={onSubmitMain} onWithdrawMain={onWithdrawMain} notify={notify} notifications={notifications}/></div>;
+  if (role === "leader") return <div className="role-dashboard-stack"><DepartmentTodoSummary user={user} onOpenSource={onOpenWorkItem}/><WhiteCardDashboardTodo user={user} onOpen={onOpenWhiteCards}/><LeaderTaskWorkspace user={user} accounts={accounts} tasks={tasks} subtasks={subtasks} onWorkflowAction={onWorkflowAction} onOpenTask={onOpenTask} onStartMain={onStartMain} onSubmitMain={onSubmitMain} onWithdrawMain={onWithdrawMain} notify={notify} notifications={notifications}/></div>;
 
   if (role === "teacher") return <TeacherDashboard user={user}/>;
-  return <div className="role-dashboard-stack"><WhiteCardDashboardTodo user={user} onOpen={onOpenWhiteCards}/><StaffDashboard user={user} tasks={tasks} subtasks={subtasks} onWorkflowAction={onWorkflowAction} notify={notify} notifications={notifications}/></div>;
+  return <div className="role-dashboard-stack"><DepartmentTodoSummary user={user} onOpenSource={onOpenWorkItem}/><WhiteCardDashboardTodo user={user} onOpen={onOpenWhiteCards}/><StaffDashboard user={user} tasks={tasks} subtasks={subtasks} onWorkflowAction={onWorkflowAction} notify={notify} notifications={notifications}/></div>;
 }
 
 export function ChairOverview({ tasks, activities, onOpenTask, onOpenActivities, onOpenTasks }: { tasks: Task[]; activities: ActivityRecord[]; onOpenTask: (task: Task) => void; onOpenActivities: () => void; onOpenTasks: () => void }) {
