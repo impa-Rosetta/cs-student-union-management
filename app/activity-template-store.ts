@@ -30,8 +30,12 @@ export async function ensureActivityTemplateSchema() {
 
 function parse<T>(value: string, fallback: T): T { try { return JSON.parse(value) as T; } catch { return fallback; } }
 function entity(row: Row): ActivityTemplate { return { id: row.id, name: row.name, category: row.category, description: row.description, organizer: row.organizer, departments: parse(row.departments_json, []), needsVenue: Boolean(row.needs_venue), venueRequest: parse(row.venue_request_json, {}), tasks: parse(row.tasks_json, []), createdBy: row.created_by, createdAt: row.created_at }; }
-function activityDateMs(value: unknown) { const match = String(value || "").match(/(\d{4})年(\d{1,2})月(\d{1,2})日/); return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).getTime() : null; }
-function offsetDays(value: unknown, base: number | null) { const parsed = Date.parse(String(value || "")); return base != null && Number.isFinite(parsed) ? Math.round((parsed - base) / 86400000) : null; }
+function calendarDayMs(value: unknown) {
+  const match = String(value || "").match(/(\d{4})(?:年|-)(\d{1,2})(?:月|-)(\d{1,2})/);
+  return match ? Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
+}
+function activityDateMs(value: unknown) { return calendarDayMs(value); }
+function offsetDays(value: unknown, base: number | null) { const parsed = calendarDayMs(value); return base != null && parsed != null ? Math.round((parsed - base) / 86400000) : null; }
 function shifted(base: number, offset: number | null, fallback = "") { if (offset == null) return fallback; const date = new Date(base + offset * 86400000); return date.toISOString().slice(0, 16); }
 
 export async function listActivityTemplates() { await ensureActivityTemplateSchema(); const rows = await db.prepare("SELECT * FROM activity_templates ORDER BY id DESC").all<Row>(); return (rows.results || []).map(entity); }
