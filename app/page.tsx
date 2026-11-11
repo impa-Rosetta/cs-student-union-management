@@ -46,6 +46,9 @@ import {
 import { ChairOverview, ConfirmActionModal, LoginScreen, ProductModule, QuickFlowModal, RoleDashboard, TextEntryModal, WhiteCardDashboardTodo } from "./views";
 import { DepartmentTodoSummary, WorkItemsDashboard } from "./work-items-dashboard";
 import type { WorkItem } from "./work-management/store";
+import { TeacherSupervisionDashboard } from "./teacher-supervision-dashboard";
+
+type TaskDependencyRecord = { id: number; predecessorTaskId: number; successorTaskId: number; dependencyType: "finish_to_start"; createdBy: string; createdAt: string };
 
 const TASK_TYPE_ICONS: Record<string, React.ComponentType<{ size?: number | string }>> = {
   "package-check": PackageCheck,
@@ -73,7 +76,9 @@ export default function Home() {
   const [activeView, setActiveView] = useState<ViewKey>("overview");
   const [departmentServiceTarget, setDepartmentServiceTarget] = useState<string | null>(null);
   const [workItemTarget, setWorkItemTarget] = useState<WorkItem | null>(null);
+  const [focusedSubtaskId, setFocusedSubtaskId] = useState("");
   const [eventWorkspaceOpen, setEventWorkspaceOpen] = useState(false);
+  const [chairSupervisionTarget, setChairSupervisionTarget] = useState<string | null>(null);
   const [filter, setFilter] = useState("全部任务");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Task | null>(null);
@@ -82,6 +87,7 @@ export default function Home() {
   const [showNew, setShowNew] = useState(false);
   const [newStep, setNewStep] = useState(1);
   const [draft, setDraft] = useState<TaskDraft>(emptyDraft);
+  const [publishingTask, setPublishingTask] = useState(false);
   const [storageReady, setStorageReady] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [authMethod, setAuthMethod] = useState<"local" | "identity" | "session">("local");
@@ -92,6 +98,10 @@ export default function Home() {
   const [mainRejectionTarget, setMainRejectionTarget] = useState<Task | null>(null);
   const [pendingTaskAction, setPendingTaskAction] = useState<{ task: Task; status: TaskStatus; title: string; description: string; confirmText: string } | null>(null);
   const [workControl, setWorkControl] = useState<{ action: "block" | "unblock" | "reassign" | "reschedule"; reason: string; assignee: string; plannedEndAt: string } | null>(null);
+  const [taskDependencies, setTaskDependencies] = useState<TaskDependencyRecord[]>([]);
+  const [dependencyDraft, setDependencyDraft] = useState("");
+  const [dependencyBusy, setDependencyBusy] = useState(false);
+  const sessionUsername = session?.username;
 
   useEffect(() => {
     async function bootstrap() {
@@ -127,6 +137,15 @@ export default function Home() {
     }
     void bootstrap();
   }, []);
+
+  useEffect(() => {
+    if (!sessionUsername) return;
+    let active = true;
+    void fetch("/api/task-dependencies").then(async (response) => response.ok ? response.json() : null).then((result) => {
+      if (active && Array.isArray(result?.dependencies)) setTaskDependencies(result.dependencies);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [sessionUsername]);
 
   useEffect(() => {
     fetch("/api/organization").then((response) => response.ok ? response.json() : null).then((result) => { if (result) setOrganizationDirectory(result); }).catch(() => undefined);
@@ -373,7 +392,42 @@ export default function Home() {
     window.setTimeout(() => setNotice(""), 2400);
   }
 
-  function openNewTask() {
+  async function addTaskDependency() {
+    if (!selected?.id || !dependencyDraft) return;
+    setDependencyBusy(true);
+    const response = await fetch("/api/task-dependencies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ predecessorTaskId: Number(dependencyDraft), successorTaskId: selected.id }) });
+    const result = await response.json().catch(() => ({}));
+    setDependencyBusy(false);
+    if (!response.ok) {
+      setNotice(result.error || "添加前置任务失败");
+    } else {
+      setTaskDependencies(result.dependencies || []);
+      setDependencyDraft("");
+      setNotice("前置任务已添加，未完成前将阻止当前任务启动");
+    }
+    window.setTimeout(() => setNotice(""), 2400);
+  }
+
+  async function removeTaskDependency(id: number) {
+    setDependencyBusy(true);
+    const response = await fetch(`/api/task-dependencies?id=${id}`, { method: "DELETE" });
+    const result = await response.json().catch(() => ({}));
+    setDependencyBusy(false);
+    if (!response.ok) setNotice(result.error || "移除前置任务失败");
+    else {
+      setTaskDependencies((current) => current.filter((item) => item.id !== id));
+      setNotice("前置任务已移除");
+    }
+    window.setTimeout(() => setNotice(""), 2400);
+  }
+
+  function openNewTask(activity?: ActivityRecord) {
+    if (activity) {
+      setDraft({ ...emptyDraft, activityId: activity.id, activityName: activity.name, activityTime: `${activity.date} ${activity.time}`, activityLocation: activity.location, liaisonTeacher: activity.teacher, dynamic: {}, attachments: [] });
+      setNewStep(1);
+      setShowNew(true);
+      return;
+    }
     const saved = window.localStorage.getItem("union-task-draft-v1");
     if (saved) {
       try { const restored = JSON.parse(saved); setDraft({ ...emptyDraft, ...restored, activityId: "", activityName: "", activityTime: "", activityLocation: "", liaisonTeacher: "", dynamic: restored.dynamic || {}, attachments: restored.attachments || [] }); } catch { setDraft({ ...emptyDraft, dynamic: {}, attachments: [] }); }
@@ -455,6 +509,13 @@ export default function Home() {
   }
 
   async function addTask() {
+    const issues = taskDraftIssues();
+    if (issues.length || publishingTask) {
+      if (issues.length) setNotice(`请先完善：${issues.join("、")}`);
+      return;
+    }
+    setPublishingTask(true);
+    try {
     const schema = dynamicSchemas[draft.kind] || [];
     const dynamicFields = schema
       .filter((field) => draft.dynamic[field.key])
@@ -496,17 +557,23 @@ export default function Home() {
       setNotice(res.error || "创建失败");
     }
     window.setTimeout(() => setNotice(""), 2400);
+    } finally {
+      setPublishingTask(false);
+    }
+  }
+
+  function taskDraftIssues() {
+    const issues: string[] = [];
+    if (!draft.activityName) issues.push("所属活动");
+    if (!draft.title.trim()) issues.push("任务名称");
+    if (!draft.department) issues.push("负责部门");
+    if (!draft.plannedStartAt) issues.push("计划开始时间");
+    if (!draft.plannedEndAt) issues.push("计划完成时间");
+    if (draft.plannedStartAt && draft.plannedEndAt && draft.plannedEndAt <= draft.plannedStartAt) issues.push("完成时间须晚于开始时间");
+    return issues;
   }
 
   function handleNotify(message: string) {
-    if (message.includes("准备新任务")) {
-      const activity = activities.find((item) => message.includes(item.name));
-      if (activity) {
-        setDraft({ ...emptyDraft, activityId: activity.id, activityName: activity.name, activityTime: `${activity.date} ${activity.time}`, activityLocation: activity.location, liaisonTeacher: activity.teacher, dynamic: {}, attachments: [] });
-        setNewStep(1);
-        return setShowNew(true);
-      }
-    }
     if (message.includes("新媒体任务模板")) {
       setDraft({ ...emptyDraft, kind: "新媒体制作", dynamic: {}, attachments: [] });
       setNewStep(1);
@@ -566,6 +633,7 @@ export default function Home() {
   }
 
   function openWhiteCards() {
+    setWorkItemTarget(null);
     setDepartmentServiceTarget(session?.department === "新媒体中心" ? "新媒体中心" : "学习部");
     setEventWorkspaceOpen(false);
     setActiveView("departmentServices");
@@ -574,6 +642,12 @@ export default function Home() {
   function openWorkItem(item: WorkItem) {
     setWorkItemTarget(item);
     if (item.sourceType === "task" || item.sourceType === "subtask") {
+      setFocusedSubtaskId(item.sourceType === "subtask" ? item.sourceId : "");
+      if (item.sourceType === "subtask" && userRole === "staff") {
+        setSelected(null);
+        setActiveView("overview");
+        return;
+      }
       const taskId = item.sourceType === "task"
         ? Number(item.sourceId)
         : subtasks.find((subtask) => String(subtask.id) === item.sourceId)?.parentTaskId;
@@ -683,19 +757,19 @@ export default function Home() {
           <div><strong>学生联盟管理系统</strong><span>计算学院</span></div>
         </div>
         <nav aria-label="主导航">
-          <button className={`nav-item ${activeView === "overview" && !eventWorkspaceOpen ? "active" : ""}`} title="工作台总览" onClick={() => { setActiveView("overview"); setEventWorkspaceOpen(false); }}><LayoutDashboard size={18} />{userRole === "admin" ? "系统总览" : userRole === "chair" ? "主席总览" : userRole === "leader" ? "部门工作台" : userRole === "teacher" ? "指导教师看板" : "我的工作台"}</button>
-          <button className={`nav-item ${activeView === "workItems" ? "active" : ""}`} title="我的工作" onClick={() => { setActiveView("workItems"); setEventWorkspaceOpen(false); }}><ListTodo size={18}/>我的工作</button>
-          {userRole !== "admin" && <button className={`nav-item ${activeView === "activities" || eventWorkspaceOpen ? "active" : ""}`} title="活动管理" onClick={() => { setActiveView("activities"); setEventWorkspaceOpen(false); }}><Activity size={18} />活动管理<span className="nav-count">{activities.length}</span></button>}
-          {userRole === "chair" && <button className={`nav-item ${activeView === "tasks" ? "active" : ""}`} title="任务中心" onClick={() => setActiveView("tasks")}><ListTodo size={18} />任务中心<span className="nav-count alert">{tasks.filter(t => t.status !== "已完成").length}</span></button>}
-          <button className={`nav-item ${activeView === "venueRequests" ? "active" : ""}`} title="场地申请" onClick={() => { setActiveView("venueRequests"); setEventWorkspaceOpen(false); }}><MapPin size={18}/>场地申请</button>
-          <button className={`nav-item ${activeView === "departmentServices" ? "active" : ""}`} title="部门办事中心" onClick={() => { setDepartmentServiceTarget(null); setActiveView("departmentServices"); setEventWorkspaceOpen(false); }}><Building2 size={18}/>部门办事中心</button>
-          {(userRole === "chair" || userRole === "admin") && <button className={`nav-item ${activeView === "organization" ? "active" : ""}`} title="组织与成员" onClick={() => setActiveView("organization")}><Users size={18} />组织与成员</button>}
-          {userRole !== "admin" && <button className={`nav-item ${activeView === "archive" ? "active" : ""}`} title="资料归档" onClick={() => setActiveView("archive")}><FileText size={18} />资料归档</button>}
-          {userRole === "admin" && <button className={`nav-item ${activeView === "accounts" ? "active" : ""}`} title="账号与权限" onClick={() => setActiveView("accounts")}><UserCheck size={18}/>账号与权限{accountDirectory.filter((account) => !account.active).length > 0 && <span className="nav-count alert">{accountDirectory.filter((account) => !account.active).length}</span>}</button>}
-          {userRole === "admin" && <button className={`nav-item ${activeView === "audit" ? "active" : ""}`} title="审计日志" onClick={() => setActiveView("audit")}><FileText size={18}/>审计日志</button>}
+          <button className={`nav-item ${activeView === "overview" && !eventWorkspaceOpen ? "active" : ""}`} title="工作台总览" onClick={() => { setWorkItemTarget(null); setFocusedSubtaskId(""); setChairSupervisionTarget(null); setActiveView("overview"); setEventWorkspaceOpen(false); }}><LayoutDashboard size={18} />{userRole === "admin" ? "系统总览" : userRole === "chair" ? "主席总览" : userRole === "leader" ? "部门工作台" : userRole === "teacher" ? "指导教师看板" : "我的工作台"}</button>
+          <button className={`nav-item ${activeView === "workItems" ? "active" : ""}`} title="我的工作" onClick={() => { setWorkItemTarget(null); setFocusedSubtaskId(""); setActiveView("workItems"); setEventWorkspaceOpen(false); }}><ListTodo size={18}/>我的工作</button>
+          {userRole !== "admin" && <button className={`nav-item ${activeView === "activities" || eventWorkspaceOpen ? "active" : ""}`} title="活动管理" onClick={() => { setWorkItemTarget(null); setFocusedSubtaskId(""); setActiveView("activities"); setEventWorkspaceOpen(false); }}><Activity size={18} />活动管理<span className="nav-count">{activities.length}</span></button>}
+          {userRole === "chair" && <button className={`nav-item ${activeView === "tasks" ? "active" : ""}`} title="任务中心" onClick={() => { setWorkItemTarget(null); setFocusedSubtaskId(""); setActiveView("tasks"); }}><ListTodo size={18} />任务中心<span className="nav-count alert">{tasks.filter(t => t.status !== "已完成").length}</span></button>}
+          <button className={`nav-item ${activeView === "venueRequests" ? "active" : ""}`} title="场地申请" onClick={() => { setWorkItemTarget(null); setActiveView("venueRequests"); setEventWorkspaceOpen(false); }}><MapPin size={18}/>场地申请</button>
+          <button className={`nav-item ${activeView === "departmentServices" ? "active" : ""}`} title="部门办事中心" onClick={() => { setWorkItemTarget(null); setDepartmentServiceTarget(null); setActiveView("departmentServices"); setEventWorkspaceOpen(false); }}><Building2 size={18}/>部门办事中心</button>
+          {(userRole === "chair" || userRole === "admin") && <button className={`nav-item ${activeView === "organization" ? "active" : ""}`} title="组织与成员" onClick={() => { setWorkItemTarget(null); setFocusedSubtaskId(""); setActiveView("organization"); }}><Users size={18} />组织与成员</button>}
+          {userRole !== "admin" && <button className={`nav-item ${activeView === "archive" ? "active" : ""}`} title="资料归档" onClick={() => { setWorkItemTarget(null); setFocusedSubtaskId(""); setActiveView("archive"); }}><FileText size={18} />资料归档</button>}
+          {userRole === "admin" && <button className={`nav-item ${activeView === "accounts" ? "active" : ""}`} title="账号与权限" onClick={() => { setWorkItemTarget(null); setFocusedSubtaskId(""); setActiveView("accounts"); }}><UserCheck size={18}/>账号与权限{accountDirectory.filter((account) => !account.active).length > 0 && <span className="nav-count alert">{accountDirectory.filter((account) => !account.active).length}</span>}</button>}
+          {userRole === "admin" && <button className={`nav-item ${activeView === "audit" ? "active" : ""}`} title="审计日志" onClick={() => { setWorkItemTarget(null); setFocusedSubtaskId(""); setActiveView("audit"); }}><FileText size={18}/>审计日志</button>}
         </nav>
         <div className="sidebar-bottom">
-          {(userRole === "chair" || userRole === "admin") && <button className={`nav-item ${activeView === "settings" ? "active" : ""}`} title={userRole === "admin" ? "系统配置" : "功能调研"} onClick={() => setActiveView("settings")}><Settings size={18} />{userRole === "admin" ? "系统配置" : "功能调研"}</button>}
+          {(userRole === "chair" || userRole === "admin") && <button className={`nav-item ${activeView === "settings" ? "active" : ""}`} title={userRole === "admin" ? "系统配置" : "功能调研"} onClick={() => { setWorkItemTarget(null); setFocusedSubtaskId(""); setActiveView("settings"); }}><Settings size={18} />{userRole === "admin" ? "系统配置" : "功能调研"}</button>}
           <div className="profile">
             <div className="avatar">{roleProfiles[userRole].initial}</div>
             <div><strong>{roleProfiles[userRole].name}</strong><span>{roleProfiles[userRole].title}</span></div>
@@ -712,14 +786,14 @@ export default function Home() {
             <div className="session-chip"><span>{session.name}</span><small>{session.title}</small></div>
             <button className={`icon-button ${showNotifications ? "active" : ""}`} aria-label={`通知，${unreadNotificationCount}条未读`} onClick={() => setShowNotifications(!showNotifications)}><Bell size={19} />{unreadNotificationCount > 0 && <i />}</button>
             <button className="icon-button" aria-label="退出登录" title="退出登录" onClick={logout}><LogOut size={18}/></button>
-            {userRole === "chair" && <button className="primary-button" onClick={openNewTask}><Plus size={18} />发布任务</button>}
+            {userRole === "chair" && <button className="primary-button" onClick={() => openNewTask()}><Plus size={18} />发布任务</button>}
           </div>
         </header>
 
         {showNotifications && <aside className="notification-panel"><header><div><h2>{userRole === "admin" ? "系统通知" : userRole === "chair" ? "主席通知" : userRole === "leader" ? "负责人通知" : userRole === "teacher" ? "指导教师通知" : "我的通知"}</h2><span>{unreadNotificationCount} 条未读</span></div><button className="icon-button" onClick={() => setShowNotifications(false)}><X size={17}/></button></header><div>{notifications.length ? notifications.map((item) => { const isRead = readNotifications.includes(item.id); return <button key={item.id} className={`${item.level || ""} ${isRead ? "read" : ""}`} onClick={() => openNotification(item)}><i/><span><strong>{item.title}</strong><p>{item.detail}</p><small>{item.time}</small></span></button>; }) : <div className="notification-empty"><Bell size={20}/><strong>暂无通知</strong></div>}</div><footer><button disabled={!unreadNotificationCount} onClick={() => { const ids = notifications.map((item) => item.id); setReadNotifications(ids); if (session) void fetch("/api/notifications/read", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: session.username, ids }) }).catch(() => undefined); setNotice("已将当前通知全部标为已读"); }}>全部标为已读</button></footer></aside>}
 
         <div className="content">
-          {activeView === "workItems" ? <WorkItemsDashboard user={session} onOpenSource={openWorkItem}/>: activeView !== "overview" ? <ProductModule user={session} view={activeView} tasks={tasks} activities={activities} archiveItems={archiveItems} role={userRole} departmentServiceTarget={departmentServiceTarget} workItemTarget={workItemTarget} onBack={() => { setActiveView("overview"); setEventWorkspaceOpen(userRole === "chair"); }} onOpenTask={setSelected} onCreate={userRole === "chair" ? openNewTask : () => setNotice("只有主席可以发布主任务")} onCreateActivity={() => { setEditingActivity(null); setQuickFlow("activity"); }} onEditActivity={editActivity} onActivityAction={runActivityAction} onUploadArchive={() => setQuickFlow("archive")} notify={handleNotify} pushNotification={pushNotification} /> : userRole !== "chair" ? <RoleDashboard user={session} accounts={accountDirectory} role={userRole} tasks={tasks} activities={activities} subtasks={subtasks} onWorkflowAction={runWorkflowAction} onOpenTask={setSelected} onOpenWorkItem={openWorkItem} onStartMain={startMainAsLeader} onSubmitMain={submitMainForChair} onWithdrawMain={withdrawMainForLeader} onOpenWhiteCards={openWhiteCards} notify={handleNotify} notifications={notifications} /> : !eventWorkspaceOpen ? <div className="role-dashboard-stack"><DepartmentTodoSummary user={session} onOpenSource={openWorkItem}/><WhiteCardDashboardTodo user={session} onOpen={openWhiteCards}/><ChairOverview tasks={tasks} activities={activities} onOpenTask={setSelected} onOpenActivities={() => setActiveView("activities")} onOpenTasks={() => setActiveView("tasks")}/></div> : <>
+          {activeView === "workItems" ? <WorkItemsDashboard user={session} onOpenSource={openWorkItem}/>: activeView !== "overview" ? <ProductModule user={session} view={activeView} tasks={tasks} activities={activities} archiveItems={archiveItems} role={userRole} departmentServiceTarget={departmentServiceTarget} workItemTarget={workItemTarget} onBack={() => { setActiveView("overview"); setEventWorkspaceOpen(userRole === "chair"); }} onOpenTask={setSelected} onCreate={userRole === "chair" ? openNewTask : () => setNotice("只有主席可以发布主任务")} onCreateActivity={() => { setEditingActivity(null); setQuickFlow("activity"); }} onEditActivity={editActivity} onActivityAction={runActivityAction} onUploadArchive={() => setQuickFlow("archive")} notify={handleNotify} pushNotification={pushNotification} /> : userRole !== "chair" ? <RoleDashboard user={session} accounts={accountDirectory} role={userRole} tasks={tasks} activities={activities} subtasks={subtasks} focusSubtaskId={focusedSubtaskId} onWorkflowAction={runWorkflowAction} onOpenTask={setSelected} onOpenWorkItem={openWorkItem} onStartMain={startMainAsLeader} onSubmitMain={submitMainForChair} onWithdrawMain={withdrawMainForLeader} onOpenWhiteCards={openWhiteCards} notify={handleNotify} notifications={notifications} /> : chairSupervisionTarget !== null ? <TeacherSupervisionDashboard user={session} mode="chair" initialActivityId={chairSupervisionTarget || null} onExit={() => setChairSupervisionTarget(null)}/> : !eventWorkspaceOpen ? <div className="role-dashboard-stack"><DepartmentTodoSummary user={session} onOpenSource={openWorkItem}/><WhiteCardDashboardTodo user={session} onOpen={openWhiteCards}/><ChairOverview tasks={tasks} activities={activities} onOpenTask={setSelected} onOpenActivities={() => setActiveView("activities")} onOpenTasks={() => setActiveView("tasks")} onOpenSupervision={(activityId) => setChairSupervisionTarget(activityId || "")}/></div> : <>
           <section className="event-head">
             <div className="event-title-row">
               <div><span className="event-kicker">校级文体活动 · 筹备中</span><h1>计算学院十佳歌手比赛</h1></div>
@@ -739,14 +813,14 @@ export default function Home() {
               <div className="progress-track"><i style={{ width: `${progress}%` }} /></div>
               <div className="progress-foot"><span>{tasks.filter((task) => task.status === "已完成").length} 项已完成</span><span>{tasks.length - tasks.filter((task) => task.status === "已完成").length} 项待推进</span></div>
             </div>
-            <button className="metric warning" onClick={() => setFilter("进行中")}><CircleAlert size={20} /><span><strong>1</strong>项存在风险</span><small>横幅经费待确认</small></button>
+            <button className="metric warning" onClick={() => setFilter("进行中")}><CircleAlert size={20} /><span><strong>{tasks.filter((task) => task.risk && task.status !== "已完成").length}</strong>项存在风险</span><small>{tasks.find((task) => task.risk && task.status !== "已完成")?.title || "当前没有风险事项"}</small></button>
             <button className="metric" onClick={() => setFilter("待开始")}><Clock3 size={20} /><span><strong>{tasks.filter((task) => task.status === "待开始").length}</strong>项待启动</span><small>待负责人处理</small></button>
-            <button className="metric" onClick={() => setFilter("待验收")}><CheckCircle2 size={20} /><span><strong>1</strong>项待验收</span><small>音响设备清单</small></button>
+            <button className="metric" onClick={() => setFilter("待验收")}><CheckCircle2 size={20} /><span><strong>{tasks.filter((task) => task.status === "待验收").length}</strong>项待验收</span><small>{tasks.find((task) => task.status === "待验收")?.title || "当前没有待验收任务"}</small></button>
           </section>
 
           <section className="main-grid">
             <div className="task-area">
-              <div className="section-head"><div><h2>任务执行</h2></div><button className="outline-button" onClick={() => setQuickFlow("timeline")}><CalendarDays size={16} />时间线</button></div>
+              <div className="section-head"><div><h2>任务执行</h2></div><button className="outline-button" onClick={() => { setEventWorkspaceOpen(false); setChairSupervisionTarget("top-singer"); }}><CalendarDays size={16} />监管时间轴</button></div>
               <div className="filters" role="tablist">
                 {filters.map((item) => <button key={item} className={filter === item ? "selected" : ""} onClick={() => setFilter(item)}>{item}{item === "全部任务" && <span>{tasks.length}</span>}</button>)}
               </div>
@@ -769,10 +843,8 @@ export default function Home() {
               {tasks.filter((task) => task.risk || task.status === "待验收").slice(0,2).map((task) => <button className={`execution-focus-item ${task.risk ? "urgent" : ""}`} key={task.id} onClick={() => setSelected(task)}><i>{task.risk ? <CircleAlert size={16}/> : <ClipboardCheck size={16}/>}</i><span><strong>{task.title}</strong><small>{task.department} · {task.person} · {task.status}</small></span><ChevronRight size={15}/></button>)}
               <div className="timeline-mini">
                 <div className="mini-title"><h3>关键节点</h3><span>本周</span></div>
-                <div className="mini-item done"><i><Check size={13} /></i><span><b>预热推文发布</b><small>9月19日 · 已完成</small></span></div>
-                <div className="mini-item active"><i>20</i><span><b>横幅定稿与下单</b><small>今天 · 科创中心</small></span></div>
-                <div className="mini-item"><i>23</i><span><b>舞台联排</b><small>19:00 · 报告厅</small></span></div>
-                <div className="mini-item"><i>25</i><span><b>正式比赛</b><small>18:30 · 学生活动中心</small></span></div>
+                {tasks.slice(0,4).map((task, index) => <button key={task.id} className={`mini-item ${task.status === "已完成" ? "done" : task.status === "进行中" || task.status === "待验收" ? "active" : ""}`} onClick={() => setSelected(task)}><i>{task.status === "已完成" ? <Check size={13}/> : index + 1}</i><span><b>{task.title}</b><small>{task.deadline} · {task.department}</small></span></button>)}
+                {!tasks.length && <div className="mini-item"><i>—</i><span><b>尚未创建任务</b><small>发布任务后自动形成关键节点</small></span></div>}
               </div>
             </aside>
           </section>
@@ -789,8 +861,9 @@ export default function Home() {
               <section><div className="section-inline"><h3>所属活动</h3></div><div className="activity-context-detail"><div><Activity size={16}/><span><small>活动名称</small><strong>{selected.activityName || currentActivity.name}</strong></span></div><div><CalendarDays size={16}/><span><small>活动时间</small><strong>{selected.activityTime || currentActivity.time}</strong></span></div><div><MapPin size={16}/><span><small>活动地点</small><strong>{selected.activityLocation || currentActivity.location}</strong></span></div><div><Users size={16}/><span><small>指导教师</small><strong>{selected.liaisonTeacher || currentActivity.liaisonTeacher || "未指定"}</strong></span></div></div></section>
               <section><h3>任务说明</h3><p className="description">{selected.description}</p></section>
               <section><h3>执行信息</h3><div className="detail-grid"><div><span>负责部门</span><strong>{selected.department}</strong></div><div><span>执行人</span><strong>{selected.person}</strong></div><div><span>截止时间</span><strong>{selected.deadline}</strong></div><div><span>管理方式</span><strong>{getControlMode(selected)}</strong></div></div></section>
+              <section className="task-dependency-panel"><div className="section-inline"><h3>前置任务</h3><small>前置任务完成后，当前任务才能启动</small></div>{(() => { const dependencies = taskDependencies.filter((item) => item.successorTaskId === selected.id); const predecessorIds = new Set(dependencies.map((item) => item.predecessorTaskId)); const candidates = tasks.filter((item) => item.id !== selected.id && !predecessorIds.has(Number(item.id))); return <><div className="task-dependency-list">{dependencies.map((dependency) => { const predecessor = tasks.find((item) => item.id === dependency.predecessorTaskId); return <div key={dependency.id}><span><i className={predecessor?.status === "已完成" ? "done" : "waiting"}>{predecessor?.status === "已完成" ? <Check size={12}/> : <Clock3 size={12}/>}</i><span><strong>{predecessor?.title || `任务 #${dependency.predecessorTaskId}`}</strong><small>{predecessor?.status || "记录已不存在"}</small></span></span>{userRole === "chair" && <button disabled={dependencyBusy} onClick={() => void removeTaskDependency(dependency.id)} aria-label={`移除${predecessor?.title || "前置任务"}`}><X size={14}/></button>}</div>; })}{!dependencies.length && <p>当前没有设置前置任务，可直接开始。</p>}</div>{userRole === "chair" && candidates.length > 0 && <div className="task-dependency-add"><select value={dependencyDraft} onChange={(event) => setDependencyDraft(event.target.value)}><option value="">选择要先完成的任务</option>{candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.title} · {candidate.status}</option>)}</select><button className="outline-button" disabled={!dependencyDraft || dependencyBusy} onClick={() => void addTaskDependency()}><Plus size={14}/>添加</button></div>}</>; })()}</section>
               <section><div className="section-inline"><h3>任务参数</h3></div><div className="dynamic-fields">{selected.fields.map((field) => <div key={field.label}><span>{field.label}</span><strong>{field.value}</strong></div>)}</div></section>
-              {userRole === "chair" && <section className="chair-execution-detail"><div className="section-inline"><h3>执行分工</h3></div>{(() => { const children = subtasks.filter((item) => isSubtaskOf(item, selected)); const finished = children.filter((item) => item.status === "已完成").length; return <><div className="execution-summary"><span><strong>{children.length || 1}</strong><small>{children.length ? "项执行分工" : "项直接交办"}</small></span><span><strong>{children.length ? `${finished}/${children.length}` : selected.status}</strong><small>{children.length ? "已完成" : "主任务状态"}</small></span><span><strong>{selected.person}</strong><small>主执行人</small></span></div>{children.length ? <div className="chair-subtask-list">{children.map((item) => <article key={item.id || `${item.parent}-${item.title}`}><header><span><i className="avatar tiny">{item.assignee.slice(0,1)}</i><b>{item.assignee}</b><small>{accountDirectory.find((account) => account.name === item.assignee)?.role === "leader" ? "负责人" : "干事"}</small></span><em className={`status status-${item.status}`}>{item.status}</em></header><h4>{item.title}</h4><dl><div><dt>截止时间</dt><dd>{item.deadline}</dd></div><div><dt>完成要求</dt><dd>{item.evidence}</dd></div></dl>{item.completionNote && <p><strong>完成说明：</strong>{item.completionNote}</p>}{item.lastAction && <p><strong>最新动态：</strong>{item.lastAction}</p>}{item.attachments?.length ? <div className="chair-proof-list">{item.attachments.map((file) => <button key={file.key} onClick={() => window.open(`/api/files?key=${encodeURIComponent(file.key)}`, "_blank")}><Paperclip size={12}/>{file.name}</button>)}</div> : <small className="no-proof">暂无上传凭据</small>}</article>)}</div> : <div className="direct-executor-row"><UserCheck size={18}/><span><strong>{selected.person} · {selected.person === session?.name ? "部门负责人" : "主执行人"}</strong><small>该任务未拆分子任务，由主席直接交办的执行人负责完成。</small></span><em className={`status status-${selected.status}`}>{selected.status}</em></div>}</>; })()}</section>}
+              {userRole === "chair" && <section className="chair-execution-detail"><div className="section-inline"><h3>执行分工</h3></div>{(() => { const children = subtasks.filter((item) => isSubtaskOf(item, selected)); const finished = children.filter((item) => item.status === "已完成").length; return <><div className="execution-summary"><span><strong>{children.length || 1}</strong><small>{children.length ? "项执行分工" : "项直接交办"}</small></span><span><strong>{children.length ? `${finished}/${children.length}` : selected.status}</strong><small>{children.length ? "已完成" : "主任务状态"}</small></span><span><strong>{selected.person}</strong><small>主执行人</small></span></div>{children.length ? <div className="chair-subtask-list">{children.map((item) => <article key={item.id || `${item.parent}-${item.title}`} className={String(item.id)===focusedSubtaskId ? "focused-work-item" : ""}><header><span><i className="avatar tiny">{item.assignee.slice(0,1)}</i><b>{item.assignee}</b><small>{accountDirectory.find((account) => account.name === item.assignee)?.role === "leader" ? "负责人" : "干事"}</small></span><em className={`status status-${item.status}`}>{item.status}</em></header><h4>{item.title}</h4><dl><div><dt>截止时间</dt><dd>{item.deadline}</dd></div><div><dt>完成要求</dt><dd>{item.evidence}</dd></div></dl>{item.completionNote && <p><strong>完成说明：</strong>{item.completionNote}</p>}{item.lastAction && <p><strong>最新动态：</strong>{item.lastAction}</p>}{item.attachments?.length ? <div className="chair-proof-list">{item.attachments.map((file) => <button key={file.key} onClick={() => window.open(`/api/files?key=${encodeURIComponent(file.key)}`, "_blank")}><Paperclip size={12}/>{file.name}</button>)}</div> : <small className="no-proof">暂无上传凭据</small>}</article>)}</div> : <div className="direct-executor-row"><UserCheck size={18}/><span><strong>{selected.person} · {selected.person === session?.name ? "部门负责人" : "主执行人"}</strong><small>该任务未拆分子任务，由主席直接交办的执行人负责完成。</small></span><em className={`status status-${selected.status}`}>{selected.status}</em></div>}</>; })()}</section>}
               <section><div className="section-inline"><h3>附件资料</h3>{(userRole === "chair" || userRole === "leader") && showTaskActions && selected.status !== "已完成" && <label className="attach-action"><Paperclip size={14}/>{uploading ? "上传中" : "添加附件"}<input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip" multiple disabled={uploading} onChange={(event) => { const files = event.currentTarget.files; event.currentTarget.value = ""; uploadSelectedFiles(files); }}/></label>}</div><div className="attachment-list">{(selected.attachments || []).map((file, index) => <div className="attachment-row" key={`${file.key || file.name}-${index}`}><button className="attachment-open" onClick={() => file.key && window.open(`/api/files?key=${encodeURIComponent(file.key)}`, "_blank")}><FileText size={18}/><span><strong>{file.name}</strong><small>{file.type?.startsWith("image/") ? "图片" : "文件"} · {(file.size / 1024 / 1024).toFixed(file.size > 1024 * 1024 ? 1 : 2)} MB</small></span><span>查看</span></button>{file.key && (userRole === "chair" || userRole === "leader") && showTaskActions && selected.status !== "已完成" && <button className="attachment-delete" title="删除附件" aria-label={`删除${file.name}`} onClick={() => removeSelectedAttachment(file)}><X size={15}/></button>}</div>)}{!selected.attachments?.length && <div className="no-attachments"><Paperclip size={16}/>暂无附件，可上传图片、方案或往届参考资料</div>}</div></section>
               <section><h3>最新动态</h3><div className="activity-line"><div className="avatar small">{selected.lastAction ? roleProfiles[userRole].initial : "陈"}</div><p><strong>{selected.lastAction || "陈雨桐 更新了任务进度"}</strong><small>{selected.lastAction ? "状态变更已留痕，可在活动归档中追溯" : "已确认横幅尺寸，等待办公室完成经费审批 · 35分钟前"}</small></p></div></section>
               {!["teacher","admin"].includes(userRole) && selected.status !== "已完成" && <section><div className="section-inline"><h3>任务协调</h3></div><div className="detail-action-grid"><button className="outline-button" onClick={()=>setWorkControl({action:selected.blocked?"unblock":"block",reason:"",assignee:"",plannedEndAt:""})}>{selected.blocked?"解除阻塞":"标记阻塞"}</button>{["chair","leader"].includes(userRole)&&<><button className="outline-button" onClick={()=>setWorkControl({action:"reassign",reason:"",assignee:selected.person||"",plannedEndAt:""})}>调整负责人</button><button className="outline-button" onClick={()=>setWorkControl({action:"reschedule",reason:"",assignee:"",plannedEndAt:selected.plannedEndAt||""})}>调整期限</button></>}</div></section>}
@@ -831,9 +904,10 @@ export default function Home() {
               {newStep === 4 && <section className="wizard-section"><div className="wizard-title"><h3>确认任务信息</h3></div><div className="summary-scope"><Activity size={16}/><span><small>所属范围</small><strong>{draft.activityName}</strong></span></div><div className="create-summary"><div className="summary-main"><span className="tag">{draft.kind}</span><h3>{draft.title || "未填写任务名称"}</h3><p>{draft.description || "暂无补充说明。"}</p></div><dl><div><dt>负责部门</dt><dd>{draft.department}</dd></div><div><dt>执行人</dt><dd>{draft.person}</dd></div><div><dt>计划开始</dt><dd>{draft.plannedStartAt ? draft.plannedStartAt.replace("T", " ") : "未设置"}</dd></div><div><dt>计划完成</dt><dd>{draft.plannedEndAt ? draft.plannedEndAt.replace("T", " ") : "未设置"}</dd></div><div><dt>管理方式</dt><dd>{draft.controlMode}</dd></div></dl><div className="summary-fields">{dynamicSchemas[draft.kind].filter((field) => draft.dynamic[field.key]).map((field) => <div key={field.key}><span>{field.label}</span><strong>{draft.dynamic[field.key]}</strong></div>)}</div><div className="notify-preview"><Bell size={17} /><span><strong>创建后自动通知</strong>{draft.department}负责人{draft.person !== "待指派" ? `、${draft.person}` : ""}{draft.controlMode === "负责人确认" ? `和确认人“${draft.reviewer}”` : ""}</span></div></div></section>}
             </div>
 
+            {newStep >= 2 && taskDraftIssues().length > 0 && <div className="form-issue-summary" role="status"><CircleAlert size={16}/><span><strong>还需完善 {taskDraftIssues().length} 项</strong><small>{taskDraftIssues().join("、")}</small></span></div>}
             <footer className="wizard-actions">
               <div className="wizard-draft-actions"><span className="autosave-note"><CheckCircle2 size={14}/>内容已自动保存</span><button className="draft-button" onClick={saveDraft}>保存并退出</button></div>
-              <div>{newStep > 1 && <button className="outline-button" onClick={() => setNewStep(newStep - 1)}>上一步</button>}{newStep < 4 ? <button className="primary-button" disabled={(newStep === 1 && !draft.activityName) || (newStep === 2 && !draft.title.trim())} onClick={() => setNewStep(newStep + 1)}>下一步</button> : <button className="primary-button" disabled={!draft.title.trim() || !draft.activityName} onClick={addTask}><CheckCircle2 size={18} />确认发布</button>}</div>
+              <div>{newStep > 1 && <button className="outline-button" disabled={publishingTask} onClick={() => setNewStep(newStep - 1)}>上一步</button>}{newStep < 4 ? <button className="primary-button" disabled={(newStep === 1 && !draft.activityName) || (newStep === 2 && taskDraftIssues().length > 0)} onClick={() => setNewStep(newStep + 1)}>下一步</button> : <button className="primary-button" disabled={publishingTask || uploading || taskDraftIssues().length > 0} onClick={addTask}><CheckCircle2 size={18} />{publishingTask ? "发布中…" : "确认发布"}</button>}</div>
             </footer>
           </div>
         </div>

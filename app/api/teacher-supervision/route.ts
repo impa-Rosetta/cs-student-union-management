@@ -7,7 +7,7 @@ import { listActivityServiceWorkItems } from "../../work-management/store.ts";
 
 export async function GET(request: Request) {
   try {
-    await requireRole(request, ["teacher", "admin"]);
+    await requireRole(request, ["teacher", "admin", "chair"]);
     const [activities, tasks, subtasks, events, services] = await Promise.all([
       listActivities(),
       listAllTasks(),

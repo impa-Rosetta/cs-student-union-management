@@ -27,7 +27,7 @@ test("server-renders the authenticated student union shell", async () => {
 });
 
 test("keeps lightweight workflow and supervision rules in the product", async () => {
-  const [pageSrc, css, workflow, taskWorkflow, model, viewsSrc, officeSrc] = await Promise.all([
+  const [pageSrc, css, workflow, taskWorkflow, model, viewsSrc, officeSrc, workItemsSrc] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/workflow/apply-subtask-action.ts", import.meta.url), "utf8"),
@@ -35,8 +35,9 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
     readFile(new URL("../app/product-model.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/views.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/office-workspace.tsx", import.meta.url), "utf8").then(async (source) => source + "\n" + await readFile(new URL("../app/department-service-hub.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/life-department-workspace.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/learning-department-workspace.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/teacher-supervision-dashboard.tsx", import.meta.url), "utf8")),
+    readFile(new URL("../app/work-items-dashboard.tsx", import.meta.url), "utf8"),
   ]);
-  const page = pageSrc + "\n" + viewsSrc + "\n" + officeSrc;
+  const page = pageSrc + "\n" + viewsSrc + "\n" + officeSrc + "\n" + workItemsSrc;
 
   for (const mode of ["快捷办结", "凭据留痕", "负责人确认"]) {
     assert.match(page, new RegExp(mode));
@@ -97,7 +98,7 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /activity-card-date/);
   assert.match(page, /\{activity\.date\}/);
   assert.match(page, /进入完整执行台/);
-  assert.match(page, /准备新任务/);
+  assert.match(page, /onCreateTask\(selectedActivity\)/);
   assert.match(page, /function ChairOverview/);
   assert.match(page, /全局监督工作台/);
   assert.match(page, /eventWorkspaceOpen/);
@@ -108,6 +109,10 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /审计日志/);
   assert.match(page, /教师监管中心/);
   assert.match(page, /活动任务分解与计划/);
+  assert.match(page, /等待你处理/);
+  assert.match(page, /补充并重新提交/);
+  assert.match(page, /work-queue:/);
+  assert.doesNotMatch(page, /等待：\$\{item\.nextActorId\}/);
   assert.match(page, /教师账号只能查看/);
   assert.match(page, /非活动临时事项/);
   assert.doesNotMatch(page, /先确定任务所属范围/);

@@ -53,7 +53,7 @@ export async function GET(request: Request) {
       if(!purchase.officeRequestId)continue; const office=officeMap.get(purchase.officeRequestId); purchase.officeStatus=office?.status||"关联报销不存在";
       if(office?.status==="已完成"&&purchase.status==="待办公室报销"){const before=purchase.status;purchase.status="已完成";purchase.updatedAt=now();await updatePurchase(purchase);await addPurchaseEvent({entityId:purchase.id,action:"officeComplete",fromStatus:before,toStatus:"已完成",actorName:"办公室报销流程",note:`关联报销 ${office.id} 已完成`});}
     }
-    const canSeeSecret=isLifeManager(auth.user);
+    const canSeeSecret=isLifeManager(auth.user)||auth.user.role==="teacher";
     return Response.json({purchases,rooms,batches,records,lostFound:lostFound.map((item)=>canSeeSecret?item:{...item,secretFeature:"",claimantContact:"",verificationNote:""}),...events,permissions:{canManage:isLifeManager(auth.user)}});
   } catch(error){return authErrorResponse(error,"读取生活部数据失败");}
 }

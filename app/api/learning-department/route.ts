@@ -28,7 +28,7 @@ function validAttachments(value: unknown): value is Attachment[] {
 }
 
 function requireWorkspaceAccess(user: { role: string; department: string }) {
-  if (user.role !== "admin" && user.role !== "chair" && user.department !== "学习部" && user.department !== "新媒体中心") throw new AuthError(403, "当前账号不能访问白卡工作区");
+  if (!['admin','chair','teacher'].includes(user.role) && user.department !== "学习部" && user.department !== "新媒体中心") throw new AuthError(403, "当前账号不能访问白卡工作区");
 }
 
 export async function GET(request: Request) {

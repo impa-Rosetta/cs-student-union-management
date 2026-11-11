@@ -39,6 +39,7 @@ let notificationsReadRoute;
 let setStorage;
 let organizationRoute;
 let officeRequestsRoute;
+let officeServiceRoute;
 let lifeDepartmentRoute;
 let organizationDepartmentRoute;
 let learningDepartmentRoute;
@@ -141,6 +142,7 @@ before(async () => {
   notificationsReadRoute = await import("../app/api/notifications/read/route.ts");
   organizationRoute = await import("../app/api/organization/route.ts");
   officeRequestsRoute = await import("../app/api/office-requests/route.ts");
+  officeServiceRoute = await import("../app/api/office-service/route.ts");
   lifeDepartmentRoute = await import("../app/api/life-department/route.ts");
   organizationDepartmentRoute = await import("../app/api/organization-department/route.ts");
   learningDepartmentRoute = await import("../app/api/learning-department/route.ts");
@@ -253,14 +255,14 @@ test("API：state GET 五类账号均可读业务状态", async () => {
   }
 });
 
-test("API：教师监管中心仅 teacher/admin 可读取全部活动", async () => {
-  for (const email of ["teacher@demo.local", "admin@demo.local"]) {
+test("API：活动监管中心允许 teacher/admin/chair 读取全部活动", async () => {
+  for (const email of ["teacher@demo.local", "admin@demo.local", "chair@demo.local"]) {
     const res = await teacherSupervisionRoute.GET(requestFor(email, { path: "/api/teacher-supervision" }));
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.ok(Array.isArray(body.overview.activities));
   }
-  for (const email of ["chair@demo.local", "leader@demo.local", "staff@demo.local"]) {
+  for (const email of ["leader@demo.local", "staff@demo.local"]) {
     const res = await teacherSupervisionRoute.GET(requestFor(email, { path: "/api/teacher-supervision" }));
     assert.equal(res.status, 403);
   }
@@ -984,6 +986,30 @@ test("学习部白卡：模板与权限校验",async()=>{
   res=await learningDepartmentRoute.GET(requestFor("media@demo.local",{path:"/api/learning-department?template=1"}));assert.equal(res.status,403);
   res=await learningDepartmentRoute.POST(requestFor("media@demo.local",{method:"POST",path:"/api/learning-department",body:{attachments:[{key:"x",name:"x"}]}}));assert.equal(res.status,403);
   res=await learningDepartmentRoute.POST(requestFor("learning@demo.local",{method:"POST",path:"/api/learning-department",body:{attachments:[]}}));assert.equal(res.status,400);
+});
+
+test("教师只读：可以查看全部部门工作台数据但不能修改", async () => {
+  const [teacherOffice, chairOffice] = await Promise.all([
+    officeServiceRoute.GET(requestFor("teacher@demo.local", { path: "/api/office-service" })),
+    officeServiceRoute.GET(requestFor("chair@demo.local", { path: "/api/office-service" })),
+  ]);
+  assert.equal(teacherOffice.status, 200);
+  const teacherOfficeBody = await teacherOffice.json();
+  const chairOfficeBody = await chairOffice.json();
+  assert.equal(teacherOfficeBody.venueRequests.length, chairOfficeBody.venueRequests.length);
+  assert.equal(teacherOfficeBody.reports.length, chairOfficeBody.reports.length);
+
+  const teacherLearning = await learningDepartmentRoute.GET(requestFor("teacher@demo.local", { path: "/api/learning-department" }));
+  assert.equal(teacherLearning.status, 200);
+  const teacherOrganization = await organizationDepartmentRoute.GET(requestFor("teacher@demo.local", { path: "/api/organization-department" }));
+  assert.equal(teacherOrganization.status, 200);
+  const organizationBody = await teacherOrganization.json();
+  assert.equal(organizationBody.permissions.canManage, false);
+  assert.ok(organizationBody.changes.length > 0);
+  assert.ok(organizationBody.affairs.length > 0);
+
+  const teacherWrite = await organizationDepartmentRoute.POST(requestFor("teacher@demo.local", { method: "POST", path: "/api/organization-department", body: { kind: "affair", item: { title: "越权" } } }));
+  assert.equal(teacherWrite.status, 403);
 });
 
 test("统一工作项：接入任务和各部门流程并按角色裁剪", async () => {

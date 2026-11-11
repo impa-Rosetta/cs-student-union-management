@@ -74,7 +74,7 @@ function TimelineRow({ node, depth, metrics, expandable, expanded, onToggle, onO
   </div>;
 }
 
-export function TeacherSupervisionDashboard({ user }: { user: DemoUser }) {
+export function TeacherSupervisionDashboard({ user, mode = "teacher", onExit, initialActivityId }: { user: DemoUser; mode?: "teacher" | "chair"; onExit?: () => void; initialActivityId?: string | null }) {
   const [overview, setOverview] = useState<SupervisionOverview | null>(null);
   const [detail, setDetail] = useState<ActivitySupervisionDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,8 +113,8 @@ export function TeacherSupervisionDashboard({ user }: { user: DemoUser }) {
   }
 
   // Initial network synchronization is intentionally performed once when the dashboard opens.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void loadOverview(); }, []);
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  useEffect(() => { if (initialActivityId) void openActivity(initialActivityId); else void loadOverview(); }, []);
 
   const visibleActivities = useMemo(() => (overview?.activities || []).filter((activity) => {
     const matchesQuery = `${activity.name}${activity.organizer}${activity.location}${activity.departments.join("")}`.includes(query.trim());
@@ -143,9 +143,9 @@ export function TeacherSupervisionDashboard({ user }: { user: DemoUser }) {
     };
     return <div className="teacher-supervision detail-mode">
       <header className="supervision-detail-head">
-        <button className="supervision-back" onClick={() => { setDetail(null); setSelectedNode(null); }}><ArrowLeft size={17}/>返回全部活动</button>
-        <div><span>教师只读监管 · 数据实时汇总</span><h1>{detail.activity.name}</h1><p><CalendarDays size={14}/>{String(detail.activity.date || "未设置")} {String(detail.activity.time || "")}<MapPin size={14}/>{String(detail.activity.location || "未设置")}</p></div>
-        <span className="readonly-badge"><ShieldCheck size={16}/>只读查看</span>
+        <button className="supervision-back" onClick={() => { setDetail(null); setSelectedNode(null); if (!overview) void loadOverview(); }}><ArrowLeft size={17}/>返回全部活动</button>
+        <div><span>{mode === "chair" ? "主席全局监管" : "教师只读监管"} · 数据实时汇总</span><h1>{detail.activity.name}</h1><p><CalendarDays size={14}/>{String(detail.activity.date || "未设置")} {String(detail.activity.time || "")}<MapPin size={14}/>{String(detail.activity.location || "未设置")}</p></div>
+        <span className="readonly-badge"><ShieldCheck size={16}/>{mode === "chair" ? "监管视图" : "只读查看"}</span>
       </header>
       <div className="supervision-detail-stats">
         <div className={detail.summary.health === "risk" ? "danger" : detail.summary.health === "attention" ? "warning" : ""}><span>活动健康度</span><strong>{healthLabels[detail.summary.health]}</strong><small>{detail.summary.healthReasons[0] || "当前没有异常事项"}</small></div>
@@ -177,7 +177,8 @@ export function TeacherSupervisionDashboard({ user }: { user: DemoUser }) {
 
   const states = [...new Set((overview?.activities || []).map((activity) => activity.state))];
   return <div className="teacher-supervision">
-    <header className="supervision-welcome"><div><span>全部活动 · 只读监管</span><h1>您好，{user.name}教师</h1><p>从活动总览进入，可查看各部门负责人和干事的计划、进度及操作留痕。</p></div><span className="readonly-badge"><ShieldCheck size={17}/>教师监管中心</span></header>
+    {onExit && <button className="supervision-back" onClick={onExit}><ArrowLeft size={17}/>返回主席总览</button>}
+    <header className="supervision-welcome"><div><span>全部活动 · {mode === "chair" ? "全局监管" : "只读监管"}</span><h1>{mode === "chair" ? "活动执行监管" : `您好，${user.name}教师`}</h1><p>从活动总览进入，可查看各部门负责人和干事的计划、进度及操作留痕。</p></div><span className="readonly-badge"><ShieldCheck size={17}/>{mode === "chair" ? "主席监管中心" : "教师监管中心"}</span></header>
     <div className="supervision-overview-stats"><div><Activity/><span><small>全部活动</small><strong>{overview?.stats.activityCount || 0}</strong></span></div><div><Clock3/><span><small>正在推进</small><strong>{overview?.stats.activeActivityCount || 0}</strong></span></div><div className="danger"><AlertTriangle/><span><small>逾期执行项</small><strong>{overview?.stats.overdueTaskCount || 0}</strong></span></div><div className="warning"><CalendarDays/><span><small>七日内到期</small><strong>{overview?.stats.dueSoonTaskCount || 0}</strong></span></div></div>
     <div className="supervision-toolbar"><label><Search size={15}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索活动、部门或地点"/></label><select value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}><option>全部状态</option>{states.map((state) => <option key={state}>{state}</option>)}</select><select value={departmentFilter} onChange={(event) => setDepartmentFilter(event.target.value)}><option>全部部门</option>{overview?.departments.map((department) => <option key={department}>{department}</option>)}</select><button onClick={loadOverview}><RefreshCw size={14}/>刷新</button></div>
     {error && <div className="supervision-inline-error"><AlertTriangle size={15}/>{error}</div>}
