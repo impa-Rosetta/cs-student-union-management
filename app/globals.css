@@ -453,4 +453,9 @@ nav { padding-top: 22px; display: grid; gap: 5px; }
 .form-issue-summary strong { color: #7c5200; font-size: 10px; }
 .form-issue-summary small { color: #946d24; font-size: 8px; line-height: 1.55; }
 .task-wizard > .form-issue-summary { margin: 0 20px 10px; }
+.form-aware-footer { display: flex; align-items: center; gap: 8px; }
+.form-aware-footer > span { min-width: 0; margin-right: auto; display: grid; gap: 3px; color: #946d24; }
+.form-aware-footer > span strong { font-size: 9px; }
+.form-aware-footer > span small { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 8px; }
+@media(max-width:680px){.form-aware-footer{flex-wrap:wrap}.form-aware-footer>span{flex-basis:100%}.form-aware-footer>span small{max-width:100%;white-space:normal}}
 @media (max-width: 780px) { .chair-overview-head { display: grid; }.chair-overview-head > .outline-button { justify-self: start; }.chair-health-notice { grid-template-columns: 24px 1fr; }.chair-health-notice button { grid-column: 2; justify-self: start; } }

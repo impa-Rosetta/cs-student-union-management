@@ -34,7 +34,7 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
     readFile(new URL("../app/workflow/apply-task-action.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/product-model.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/views.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/office-workspace.tsx", import.meta.url), "utf8").then(async (source) => source + "\n" + await readFile(new URL("../app/department-service-hub.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/life-department-workspace.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/learning-department-workspace.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/teacher-supervision-dashboard.tsx", import.meta.url), "utf8")),
+    readFile(new URL("../app/office-workspace.tsx", import.meta.url), "utf8").then(async (source) => source + "\n" + await readFile(new URL("../app/department-service-hub.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/life-department-workspace.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/learning-department-workspace.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/organization-department-workspace.tsx", import.meta.url), "utf8") + "\n" + await readFile(new URL("../app/teacher-supervision-dashboard.tsx", import.meta.url), "utf8")),
     readFile(new URL("../app/work-items-dashboard.tsx", import.meta.url), "utf8"),
   ]);
   const page = pageSrc + "\n" + viewsSrc + "\n" + officeSrc + "\n" + workItemsSrc;
@@ -135,6 +135,10 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(page, /白卡制作与审核/);
   assert.match(page, /下载 Excel 模板/);
   assert.match(page, /api\/learning-department/);
+  assert.match(page, /请先完善/);
+  assert.match(page, /office-meeting-round-draft-v1/);
+  assert.match(page, /微信公众号推文链接/);
+  assert.match(page, /createIssues/);
   assert.match(page, /api\/office-requests/);
   assert.match(page, /编辑申请/);
   assert.match(page, /保存并提交/);
@@ -173,6 +177,7 @@ test("keeps lightweight workflow and supervision rules in the product", async ()
   assert.match(css, /office-request-list/);
   assert.match(css, /department-card-grid/);
   assert.match(css, /life-stat-grid/);
+  assert.match(css, /form-aware-footer/);
 });
 
 test("protects hosted data with platform identity and server roles", async () => {
